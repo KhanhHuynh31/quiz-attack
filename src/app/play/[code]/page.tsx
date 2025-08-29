@@ -14,7 +14,6 @@ import {
   FaQuestionCircle,
   FaHome,
 } from "react-icons/fa";
-import Background from "@/components/Background";
 
 interface Player {
   id: number;
@@ -403,35 +402,34 @@ const QuizGame = () => {
 
     return (
       <div className="w-full">
-        <Background />
         <div className="flex justify-between items-center mb-2">
           <button
             onClick={goHome}
-            className="flex items-center bg-gray-200 p-2 rounded-full hover:bg-gray-300 transition-colors"
+            className="flex items-center p-2 rounded-full hover:bg-white/10 transition-colors text-white"
           >
-            <FaHome className="text-gray-700" />
+            <FaHome className="text-xl" />
           </button>
           
           <div className="flex items-center">
-            <FaClock className="text-red-500 mr-2" />
-            <span className="text-lg font-bold">{timeLeft}s</span>
+            <FaClock className="text-[#FF6B35] mr-2" />
+            <span className="text-lg font-bold text-white">{timeLeft}s</span>
           </div>
           
           <div className="flex items-center">
-            <span className="text-lg font-bold mr-2">Câu {currentQuestionIndex + 1}/{totalQuestions}</span>
+            <span className="text-lg font-bold mr-2 text-white">Câu {currentQuestionIndex + 1}/{totalQuestions}</span>
             <button
               onClick={togglePause}
-              className="bg-gray-200 p-2 rounded-full hover:bg-gray-300 transition-colors"
+              className="p-2 rounded-full hover:bg-white/10 transition-colors text-white"
             >
               {isPaused ? (
-                <FaPlay className="text-gray-700" />
+                <FaPlay className="text-xl" />
               ) : (
-                <FaPause className="text-gray-700" />
+                <FaPause className="text-xl" />
               )}
             </button>
           </div>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-2">
+        <div className="w-full bg-white/10 rounded-full h-2">
           <motion.div
             key={`timer-${currentQuestionIndex}-${timeLeft}`}
             className="h-2 rounded-full bg-gradient-to-r from-red-500 via-yellow-500 to-green-500"
@@ -458,24 +456,24 @@ const QuizGame = () => {
 
     return (
       <div className="space-y-4">
-        <h2 className="text-xl font-bold text-center mb-4">Bảng xếp hạng</h2>
+        <h2 className="text-xl font-bold text-center mb-4 text-white">Bảng xếp hạng</h2>
         {sortedPlayers.map((player, index) => {
           const scoreUpdate = scoreUpdates.find(su => su.playerId === player.id);
           
           return (
             <motion.div
               key={player.id}
-              className={`flex items-center justify-between p-3 rounded-lg ${
+              className={`flex items-center justify-between p-3 rounded-lg backdrop-blur-md ${
                 index === 0
-                  ? "bg-yellow-100 border-2 border-yellow-400"
-                  : "bg-white"
-              } shadow relative overflow-hidden`}
+                  ? "bg-yellow-500/20 border-2 border-yellow-400/30"
+                  : "bg-white/5 border border-white/10"
+              } shadow-xl shadow-black/30 relative overflow-hidden`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
             >
               <div className="flex items-center">
-                <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white mr-3 relative">
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white mr-3 relative">
                   {index === 0 ? (
                     <FaCrown className="text-yellow-300" />
                   ) : (
@@ -485,16 +483,16 @@ const QuizGame = () => {
                     <FaCheck className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 text-white rounded-full p-0.5" />
                   )}
                 </div>
-                <span className="font-medium">{player.name}</span>
+                <span className="font-medium text-white">{player.name}</span>
               </div>
               <div className="flex items-center">
-                <span className="text-gray-600 mr-3">{player.cards} cards</span>
+                <span className="text-white/70 mr-3">{player.cards} cards</span>
                 {showLeaderboardAfterAnswer && roundScore > 0 && player.id === 1 ? (
                   <div className="flex items-center">
-                    <span className="font-bold">{player.score - roundScore}</span>
-                    <span className="text-green-500 font-bold mx-2">+{roundScore}</span>
+                    <span className="font-bold text-white">{player.score - roundScore}</span>
+                    <span className="text-green-400 font-bold mx-2">+{roundScore}</span>
                     <motion.span 
-                      className="font-bold"
+                      className="font-bold text-white"
                       initial={{ scale: 1 }}
                       animate={{ scale: [1, 1.2, 1] }}
                       transition={{ delay: 1, duration: 0.5 }}
@@ -503,11 +501,11 @@ const QuizGame = () => {
                     </motion.span>
                   </div>
                 ) : (
-                  <span className="font-bold">{player.score}</span>
+                  <span className="font-bold text-white">{player.score}</span>
                 )}
                 {scoreUpdate && (
                   <motion.span 
-                    className="text-green-500 font-bold absolute right-3 -top-2"
+                    className="text-green-400 font-bold absolute right-3 -top-2"
                     initial={{ opacity: 0, y: 0, scale: 0.5 }}
                     animate={{ opacity: 1, y: -20, scale: 1 }}
                     exit={{ opacity: 0 }}
@@ -538,24 +536,24 @@ const QuizGame = () => {
 
     return (
       <div className="h-full flex flex-col">
-        <h2 className="text-xl font-bold mb-2">Lịch sử dùng thẻ</h2>
+        <h2 className="text-xl font-bold mb-2 text-white">Lịch sử dùng thẻ</h2>
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           {usedCardsLog.length === 0 ? (
-            <div className="text-gray-500 text-center mt-10">
+            <div className="text-white/50 text-center mt-10">
               Chưa có thẻ nào được sử dụng
             </div>
           ) : (
             <div className="space-y-4">
               {Object.entries(groupedLogs).map(([question, logs]) => (
-                <div key={question} className="bg-gray-100 p-3 rounded-lg">
-                  <h3 className="font-semibold text-sm mb-2">{question}</h3>
+                <div key={question} className="bg-white/5 border border-white/10 rounded-xl p-3 backdrop-blur-md">
+                  <h3 className="font-semibold text-sm mb-2 text-white">{question}</h3>
                   <div className="space-y-2">
                     {logs.map((log, index) => {
                       const cardInfo = getCardInfo(log.cardTitle);
                       return (
                         <motion.div 
                           key={`${question}-${index}`}
-                          className={`p-2 rounded-lg text-white ${cardInfo?.color || 'bg-gray-500'} relative`}
+                          className={`p-2 rounded-lg text-white ${cardInfo?.color || 'bg-gray-500'} relative backdrop-blur-md`}
                           initial={{ opacity: 0, x: 50 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: index * 0.1 }}
@@ -585,12 +583,12 @@ const QuizGame = () => {
   // Render bài trên tay
   const renderPlayerHand = () => {
     return (
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-gray-900 to-transparent pointer-events-none">
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
         <div className="flex justify-center gap-2 pointer-events-auto">
           {currentPlayerHand.map((card) => (
             <motion.div
               key={card.uniqueId}
-              className={`w-16 h-20 ${card.color} rounded-lg shadow-md flex flex-col items-center justify-center text-white text-xs text-center p-1 cursor-pointer`}
+              className={`w-16 h-20 ${card.color} rounded-lg shadow-md flex flex-col items-center justify-center text-white text-xs text-center p-1 cursor-pointer backdrop-blur-md border border-white/20`}
               initial={{ scale: 0.8, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               whileHover={{ y: -20, scale: 1.2, zIndex: 10 }}
@@ -609,10 +607,10 @@ const QuizGame = () => {
   };
 
   return (
-    <div className="h-screen p-4 pb-24 overflow-hidden flex flex-col">
+    <div className="relative h-screen w-full font-sans flex flex-col p-4 pb-24 overflow-hidden">
       <div className="max-w-6xl mx-auto flex-1 flex flex-col w-full">
         {/* Thanh thời gian ở đầu trang */}
-        <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
+        <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-4 mb-4 shadow-xl shadow-black/30 backdrop-blur-md">
           {renderTopTimer()}
         </div>
 
@@ -620,7 +618,7 @@ const QuizGame = () => {
         <div className="md:hidden flex justify-center mb-4">
           <button
             onClick={() => setShowLeaderboard(!showLeaderboard)}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center"
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#FF6B35] px-6 py-3 font-semibold text-white shadow-lg shadow-[#FF6B35]/30 ring-1 ring-white/20"
           >
             {showLeaderboard ? "Ẩn BXH" : "Hiện BXH"}
             {showLeaderboard ? (
@@ -640,7 +638,7 @@ const QuizGame = () => {
           </div>
 
           {/* Cột giữa: Câu hỏi và đáp án hoặc bảng xếp hạng */}
-          <div className="w-full lg:w-2/4 bg-white rounded-xl shadow-lg p-4 md:p-6 overflow-auto">
+          <div className="w-full lg:w-2/4 rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-6 shadow-2xl shadow-black/40 backdrop-blur-md overflow-auto">
             <AnimatePresence mode="wait">
               {showLeaderboardAfterAnswer ? (
                 <motion.div
@@ -651,9 +649,9 @@ const QuizGame = () => {
                   transition={{ duration: 0.3 }}
                   className="h-full"
                 >
-                  <h2 className="text-2xl font-bold text-center mb-6">Cập nhật điểm số</h2>
+                  <h2 className="text-2xl font-bold text-center mb-6 text-white">Cập nhật điểm số</h2>
                   {renderPlayers()}
-                  <p className="text-center mt-6 text-gray-600">
+                  <p className="text-center mt-6 text-white/60">
                     Tiếp tục sau {Math.ceil(timeLeft/6)} giây...
                   </p>
                 </motion.div>
@@ -665,7 +663,7 @@ const QuizGame = () => {
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <h1 className="text-xl md:text-2xl font-bold text-center mb-4 md:mb-6">
+                  <h1 className="text-xl md:text-2xl font-bold text-center mb-4 md:mb-6 text-white">
                     {currentQuestion.text}
                   </h1>
 
@@ -673,7 +671,7 @@ const QuizGame = () => {
                     <motion.img
                       src={currentQuestion.image}
                       alt="Question illustration"
-                      className="w-full h-48 object-cover rounded-lg shadow-md"
+                      className="w-full h-48 object-cover rounded-xl shadow-md border border-white/10"
                       initial={{ scale: 0.9 }}
                       animate={{ scale: 1 }}
                       transition={{ duration: 0.5 }}
@@ -682,26 +680,24 @@ const QuizGame = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                     {currentQuestion.options.map((option, index) => {
-                      let buttonClass = "bg-white text-blue-600 border-2 border-blue-500";
+                      let buttonClass = "bg-white/10 text-white border-2 border-white/10 hover:bg-white/20";
 
                       if (isAnswered || showCorrectAnswer) {
                         if (index === currentQuestion.correctAnswer) {
-                          buttonClass = "bg-green-500 text-white border-2 border-green-500";
+                          buttonClass = "bg-green-500/20 text-white border-2 border-green-500/30";
                         } else if (index === selectedAnswer && index !== currentQuestion.correctAnswer) {
-                          buttonClass = "bg-red-500 text-white border-2 border-red-500";
+                          buttonClass = "bg-red-500/20 text-white border-2 border-red-500/30";
                         } else if (index === selectedAnswer) {
-                          buttonClass = "bg-blue-500 text-white border-2 border-blue-500";
+                          buttonClass = "bg-blue-500/20 text-white border-2 border-blue-500/30";
+                        } else {
+                          buttonClass = "bg-white/5 text-white/70 border-2 border-white/5";
                         }
                       }
 
                       return (
                         <motion.button
                           key={index}
-                          className={`p-3 md:p-4 rounded-lg text-left font-medium transition-all duration-300 ${buttonClass} ${
-                            !isAnswered && !showCorrectAnswer
-                              ? "hover:bg-blue-500 hover:text-white"
-                              : ""
-                          }`}
+                          className={`p-3 md:p-4 rounded-2xl text-left font-medium transition-all duration-300 ${buttonClass}`}
                           whileHover={!isAnswered && !showCorrectAnswer ? { scale: 1.02 } : {}}
                           whileTap={!isAnswered && !showCorrectAnswer ? { scale: 0.98 } : {}}
                           onClick={() => handleAnswerSelect(index)}
@@ -718,12 +714,12 @@ const QuizGame = () => {
                     <motion.div
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="mt-4 p-3 bg-blue-100 rounded-lg text-center"
+                      className="mt-4 p-3 bg-white/10 rounded-xl text-center border border-white/10"
                     >
                       {selectedAnswer === currentQuestion.correctAnswer ? (
-                        <p className="text-green-600 font-bold">Chính xác! +100 điểm</p>
+                        <p className="text-green-400 font-bold">Chính xác! +100 điểm</p>
                       ) : (
-                        <p className="text-red-600 font-bold">Sai rồi! Đáp án đúng là: {currentQuestion.options[currentQuestion.correctAnswer]}</p>
+                        <p className="text-red-400 font-bold">Sai rồi! Đáp án đúng là: {currentQuestion.options[currentQuestion.correctAnswer]}</p>
                       )}
                     </motion.div>
                   )}
@@ -733,7 +729,7 @@ const QuizGame = () => {
           </div>
 
           {/* Cột phải: Log thẻ đã sử dụng */}
-          <div className="w-full lg:w-1/4 bg-white rounded-xl shadow-lg p-4 md:p-6 overflow-auto">
+          <div className="w-full lg:w-1/4 rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-6 shadow-xl shadow-black/30 backdrop-blur-md overflow-auto">
             {renderCardLog()}
           </div>
         </div>
@@ -754,7 +750,7 @@ const QuizGame = () => {
             style={{ zIndex: 50 + index }}
           >
             <motion.div
-              className={`relative w-64 h-80 ${activeCard.card.color} rounded-xl shadow-2xl flex flex-col items-center justify-center text-white p-4`}
+              className={`relative w-64 h-80 ${activeCard.card.color} rounded-xl shadow-2xl flex flex-col items-center justify-center text-white p-4 backdrop-blur-md border-2 border-white/20`}
               initial={{ scale: 0.5, rotate: -180, y: 300, x: index * 50 }}
               animate={{ scale: 1, rotate: 0, y: 0, x: index * 20 }}
               exit={{ scale: 1.5, opacity: 0, y: -100 }}
@@ -786,7 +782,7 @@ const QuizGame = () => {
             exit={{ opacity: 0 }}
           >
             <motion.div
-              className={`relative w-64 h-80 ${drawnCard.color} rounded-xl shadow-2xl flex flex-col items-center justify-center text-white p-4`}
+              className={`relative w-64 h-80 ${drawnCard.color} rounded-xl shadow-2xl flex flex-col items-center justify-center text-white p-4 backdrop-blur-md border-2 border-white/20`}
               initial={{ scale: 0.5, x: 200, y: -200, rotate: 360 }}
               animate={{ scale: 1, x: 0, y: 0, rotate: 0 }}
               exit={{ scale: 0.5, x: -200, y: 200, opacity: 0 }}
@@ -814,7 +810,7 @@ const QuizGame = () => {
       <AnimatePresence>
         {showCardTooltip && (
           <motion.div
-            className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-90 text-white p-4 rounded-lg shadow-xl z-60 max-w-sm"
+            className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/90 text-white p-4 rounded-xl shadow-xl z-60 max-w-sm border border-white/10 backdrop-blur-md"
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
@@ -838,23 +834,23 @@ const QuizGame = () => {
       <AnimatePresence>
         {isPaused && (
           <motion.div
-            className="fixed inset-0 bg-white bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-40"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-40"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
             <motion.div 
-              className="bg-white border-2 border-gray-300 p-8 rounded-xl text-center shadow-2xl"
+              className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-8 text-center shadow-2xl shadow-black/40 backdrop-blur-md"
               initial={{ scale: 0.8, y: 50 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.8, y: 50 }}
             >
-              <h2 className="text-2xl font-bold mb-4 text-gray-800">Trò chơi tạm ngưng</h2>
-              <p className="mb-2 text-gray-600">Được tạm ngưng bởi: <span className="font-semibold">{pausedBy}</span></p>
-              <p className="mb-6 text-gray-600">Nhấn nút tiếp tục để tiếp tục chơi</p>
+              <h2 className="text-2xl font-bold mb-4 text-white">Trò chơi tạm ngưng</h2>
+              <p className="mb-2 text-white/70">Được tạm ngưng bởi: <span className="font-semibold text-white">{pausedBy}</span></p>
+              <p className="mb-6 text-white/70">Nhấn nút tiếp tục để tiếp tục chơi</p>
               <button
                 onClick={togglePause}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg flex items-center mx-auto transition-colors"
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#FF6B35] px-6 py-3 font-semibold text-white shadow-lg shadow-[#FF6B35]/30 ring-1 ring-white/20"
               >
                 <FaPlay className="mr-2" /> Tiếp tục
               </button>
