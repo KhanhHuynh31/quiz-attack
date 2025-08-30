@@ -17,7 +17,9 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <Background />
-        <I18nProvider>{children}</I18nProvider>
+        <I18nProvider>
+          {children}
+        </I18nProvider>
       </body>
     </html>
   );

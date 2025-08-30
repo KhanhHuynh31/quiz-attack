@@ -1,2 +1,48 @@
 @import "tailwindcss";
+/* Scrollbar tối giản, hiện đại */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
 
+::-webkit-scrollbar-track {
+  background: transparent; /* Bỏ nền */
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 100, 100, 0.5); /* Màu xám trong suốt */
+  border-radius: 9999px; /* Bo tròn tối đa */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 100, 100, 0.8); /* Đậm hơn khi hover */
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 100, 100, 0.5) transparent;
+}
+
+/* Class tùy chỉnh */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(79, 70, 229, 0.6) transparent; /* tím nhạt */
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(79, 70, 229, 0.6);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(55, 48, 163, 0.8);
+}

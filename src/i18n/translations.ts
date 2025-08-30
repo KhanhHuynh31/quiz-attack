@@ -1,4 +1,68 @@
-import { TranslationData, LanguageCode } from '@/types/i18n';
+export interface ModeTranslation {
+  title: string;
+  desc: string;
+  help: string;
+}
+export type LanguageCode = "en" | "vi";
+
+export interface TranslationData {
+  title: string;
+  discord: string;
+  gameModes: string;
+  nickname: string;
+  yourName: string;
+  login: string;
+  register: string;
+  username: string;
+  password: string;
+  addNewPack: string;
+  packName: string;
+  topic: string;
+  enterTopic: string;
+  addPack: string;
+  edit: string;
+  view: string;
+  delete: string;
+  questions: string;
+  back: string;
+  addQuestion: string;
+  editQuestion: string;
+  questionText: string;
+  enterQuestionText: string;
+  imageUrl: string;
+  optional: string;
+  options: string;
+  option: string;
+  save: string;
+  cancel: string;
+  noQuestions: string;
+  addFirstQuestion: string;
+  listView: string;
+  gridView: string;
+  pack: string;
+  enterPackName: string;
+  manageQuestionPacks: string;
+  loginWithFacebook: string;
+  loginWithGoogle: string;
+  createRoom: string;
+  roomCodePlaceholder: string;
+  create: string;
+  joinRoom: string;
+  enterRoomCode: string;
+  join: string;
+  copied: string;
+  addCustomPacks: string;
+  setPassword: string;
+  roomPassword: string;
+  chooseAvatar: string;
+  uploadAvatar: string;
+  modes: {
+    classic: ModeTranslation;
+    battle: ModeTranslation;
+    pve: ModeTranslation;
+  };
+  rules: string[];
+}
 
 export const translations: Record<LanguageCode, TranslationData> = {
   en: {
@@ -25,6 +89,36 @@ export const translations: Record<LanguageCode, TranslationData> = {
     roomPassword: "Room Password",
     chooseAvatar: "Choose Avatar",
     uploadAvatar: "Upload Avatar",
+
+    // New translations for QuestionsModal
+    manageQuestionPacks: "Manage Question Packs",
+    addNewPack: "Add New Pack",
+    packName: "Pack Name",
+    enterPackName: "Enter pack name",
+    topic: "Topic",
+    enterTopic: "Enter topic",
+    addPack: "Add Pack",
+    edit: "Edit",
+    view: "View",
+    delete: "Delete",
+    questions: "questions",
+    back: "Back",
+    addQuestion: "Add Question",
+    editQuestion: "Edit Question",
+    questionText: "Question Text",
+    enterQuestionText: "Enter question text",
+    imageUrl: "Image URL",
+    optional: "optional",
+    options: "Options",
+    option: "Option",
+    save: "Save",
+    cancel: "Cancel",
+    noQuestions: "No questions in this pack yet",
+    addFirstQuestion: "Add your first question",
+    listView: "List View",
+    gridView: "Grid View",
+    pack: "Pack",
+
     modes: {
       classic: {
         title: "Classic Quiz",
@@ -72,6 +166,36 @@ export const translations: Record<LanguageCode, TranslationData> = {
     roomPassword: "Mật khẩu phòng",
     chooseAvatar: "Chọn ảnh đại diện",
     uploadAvatar: "Tải ảnh lên",
+
+    // New translations for QuestionsModal
+    manageQuestionPacks: "Quản lý Bộ Câu Hỏi",
+    addNewPack: "Thêm Bộ Mới",
+    packName: "Tên Bộ",
+    enterPackName: "Nhập tên bộ",
+    topic: "Chủ Đề",
+    enterTopic: "Nhập chủ đề",
+    addPack: "Thêm Bộ",
+    edit: "Sửa",
+    view: "Xem",
+    delete: "Xóa",
+    questions: "câu hỏi",
+    back: "Quay lại",
+    addQuestion: "Thêm Câu Hỏi",
+    editQuestion: "Sửa Câu Hỏi",
+    questionText: "Nội Dung Câu Hỏi",
+    enterQuestionText: "Nhập nội dung câu hỏi",
+    imageUrl: "URL Hình Ảnh",
+    optional: "tùy chọn",
+    options: "Lựa Chọn",
+    option: "Lựa chọn",
+    save: "Lưu",
+    cancel: "Hủy",
+    noQuestions: "Chưa có câu hỏi nào trong bộ này",
+    addFirstQuestion: "Thêm câu hỏi đầu tiên",
+    listView: "Xem Danh Sách",
+    gridView: "Xem Lưới",
+    pack: "Bộ",
+
     modes: {
       classic: {
         title: "Quiz Cổ Điển",

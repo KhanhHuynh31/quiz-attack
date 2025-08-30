@@ -41,6 +41,7 @@ import {
 } from "react-icons/gi";
 import { QRCodeModal } from "@/components/QrCodeModal";
 import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
+import Link from "next/link";
 
 // Types
 interface Player {
@@ -1294,7 +1295,9 @@ const QuizAttackLobbyEnhanced: React.FC = () => {
                     >
                       <FaPlay className="text-2xl" />
                     </motion.div>
-                    <span>{t.startGame}</span>
+                    <Link href={`/play/${roomCode}`}>
+                      <span>{t.startGame}</span>
+                    </Link>
                   </div>
                 </motion.button>
               </motion.div>

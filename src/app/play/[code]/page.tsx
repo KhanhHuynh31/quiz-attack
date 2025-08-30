@@ -14,6 +14,8 @@ import {
   FaQuestionCircle,
   FaHome,
 } from "react-icons/fa";
+import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
+
 
 interface Player {
   id: number;
@@ -61,6 +63,16 @@ interface ScoreUpdate {
 }
 
 const QuizGame = () => {
+  // Sử dụng custom hook cho animation
+  const {
+    staggerChildren,
+    slideInLeft,
+    slideInRight,
+    scaleIn,
+    fadeUp,
+    containerVariants,
+  } = useEnhancedAnimations();
+
   // State quản lý dữ liệu game
   const [players, setPlayers] = useState<Player[]>([
     { id: 1, name: "Bạn", score: 1200, cards: 2, hasAnswered: false },
@@ -455,22 +467,25 @@ const QuizGame = () => {
     const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
 
     return (
-      <div className="space-y-4">
-        <h2 className="text-xl font-bold text-center mb-4 text-white">Bảng xếp hạng</h2>
+      <motion.div 
+        className="space-y-4"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        <motion.h2 variants={fadeUp} className="text-xl font-bold text-center mb-4 text-white">Bảng xếp hạng</motion.h2>
         {sortedPlayers.map((player, index) => {
           const scoreUpdate = scoreUpdates.find(su => su.playerId === player.id);
           
           return (
             <motion.div
               key={player.id}
+              variants={fadeUp}
               className={`flex items-center justify-between p-3 rounded-lg backdrop-blur-md ${
                 index === 0
                   ? "bg-yellow-500/20 border-2 border-yellow-400/30"
                   : "bg-white/5 border border-white/10"
               } shadow-xl shadow-black/30 relative overflow-hidden`}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
             >
               <div className="flex items-center">
                 <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white mr-3 relative">
@@ -518,7 +533,7 @@ const QuizGame = () => {
             </motion.div>
           );
         })}
-      </div>
+      </motion.div>
     );
   };
 
@@ -536,16 +551,20 @@ const QuizGame = () => {
 
     return (
       <div className="h-full flex flex-col">
-        <h2 className="text-xl font-bold mb-2 text-white">Lịch sử dùng thẻ</h2>
+        <motion.h2 variants={fadeUp} className="text-xl font-bold mb-2 text-white">Lịch sử dùng thẻ</motion.h2>
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           {usedCardsLog.length === 0 ? (
-            <div className="text-white/50 text-center mt-10">
+            <motion.div variants={fadeUp} className="text-white/50 text-center mt-10">
               Chưa có thẻ nào được sử dụng
-            </div>
+            </motion.div>
           ) : (
-            <div className="space-y-4">
+            <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-4">
               {Object.entries(groupedLogs).map(([question, logs]) => (
-                <div key={question} className="bg-white/5 border border-white/10 rounded-xl p-3 backdrop-blur-md">
+                <motion.div 
+                  key={question} 
+                  variants={slideInRight}
+                  className="bg-white/5 border border-white/10 rounded-xl p-3 backdrop-blur-md"
+                >
                   <h3 className="font-semibold text-sm mb-2 text-white">{question}</h3>
                   <div className="space-y-2">
                     {logs.map((log, index) => {
@@ -571,9 +590,9 @@ const QuizGame = () => {
                       );
                     })}
                   </div>
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           )}
         </div>
       </div>
@@ -583,7 +602,12 @@ const QuizGame = () => {
   // Render bài trên tay
   const renderPlayerHand = () => {
     return (
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
+      <motion.div 
+        className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent pointer-events-none"
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.5, duration: 0.5 }}
+      >
         <div className="flex justify-center gap-2 pointer-events-auto">
           {currentPlayerHand.map((card) => (
             <motion.div
@@ -602,20 +626,35 @@ const QuizGame = () => {
             </motion.div>
           ))}
         </div>
-      </div>
+      </motion.div>
     );
   };
 
   return (
-    <div className="relative h-screen w-full font-sans flex flex-col p-4 pb-24 overflow-hidden">
+    <motion.div 
+      className="relative h-screen w-full font-sans flex flex-col p-4 pb-24 overflow-hidden"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
       <div className="max-w-6xl mx-auto flex-1 flex flex-col w-full">
         {/* Thanh thời gian ở đầu trang */}
-        <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-4 mb-4 shadow-xl shadow-black/30 backdrop-blur-md">
+        <motion.div 
+          className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-4 mb-4 shadow-xl shadow-black/30 backdrop-blur-md"
+          variants={fadeUp}
+          initial="hidden"
+          animate="visible"
+        >
           {renderTopTimer()}
-        </div>
+        </motion.div>
 
         {/* Nút toggle leaderboard trên mobile */}
-        <div className="md:hidden flex justify-center mb-4">
+        <motion.div 
+          className="md:hidden flex justify-center mb-4"
+          variants={fadeUp}
+          initial="hidden"
+          animate="visible"
+        >
           <button
             onClick={() => setShowLeaderboard(!showLeaderboard)}
             className="inline-flex items-center gap-2 rounded-2xl bg-[#FF6B35] px-6 py-3 font-semibold text-white shadow-lg shadow-[#FF6B35]/30 ring-1 ring-white/20"
@@ -627,18 +666,27 @@ const QuizGame = () => {
               <FaMobile className="ml-2" />
             )}
           </button>
-        </div>
+        </motion.div>
 
-        <div className="flex-1 flex flex-col lg:flex-row gap-6 overflow-hidden">
+        <motion.div 
+          className="flex-1 flex flex-col lg:flex-row gap-6 overflow-hidden"
+          variants={staggerChildren}
+          initial="hidden"
+          animate="visible"
+        >
           {/* Cột trái: Danh sách người chơi */}
-          <div
+          <motion.div
+            variants={slideInLeft}
             className={`w-full lg:w-1/4 ${showLeaderboard ? "block" : "hidden"} md:block overflow-auto`}
           >
             {renderPlayers()}
-          </div>
+          </motion.div>
 
           {/* Cột giữa: Câu hỏi và đáp án hoặc bảng xếp hạng */}
-          <div className="w-full lg:w-2/4 rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-6 shadow-2xl shadow-black/40 backdrop-blur-md overflow-auto">
+          <motion.div 
+            variants={scaleIn}
+            className="w-full lg:w-2/4 rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-6 shadow-2xl shadow-black/40 backdrop-blur-md overflow-auto"
+          >
             <AnimatePresence mode="wait">
               {showLeaderboardAfterAnswer ? (
                 <motion.div
@@ -726,13 +774,16 @@ const QuizGame = () => {
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
+          </motion.div>
 
           {/* Cột phải: Log thẻ đã sử dụng */}
-          <div className="w-full lg:w-1/4 rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-6 shadow-xl shadow-black/30 backdrop-blur-md overflow-auto">
+          <motion.div 
+            variants={slideInRight}
+            className="w-full lg:w-1/4 rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-6 shadow-xl shadow-black/30 backdrop-blur-md overflow-auto"
+          >
             {renderCardLog()}
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </div>
       
       {/* Bài trên tay */}
@@ -858,7 +909,7 @@ const QuizGame = () => {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 };
 

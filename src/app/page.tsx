@@ -5,21 +5,21 @@ import {
   FaCheck,
   FaDoorOpen,
   FaPlus,
-  FaUserCircle,
-  FaGamepad,
   FaChevronDown,
   FaChevronUp,
   FaCog,
+  FaEye,
+  FaChevronRight,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
-import Avatar from "react-nice-avatar";
+import Avatar, { genConfig, AvatarFullConfig } from "react-nice-avatar";
 import Link from "next/link";
-import QuestionsModal from "@/components/QuestionsModal";
-import { LoginModal } from "@/components/home/LoginModal";
 import { useI18n } from "@/hooks/useI18n";
 import { Header } from "@/components/home/Header";
 import GameModeSelector from "@/components/home/GameModeSelector";
 import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
+import QuizPackSelector, { QuizPack } from "@/components/home/QuizPackSelector";
+import AvatarCustomModal from "@/components/AvatarCustomModal";
 
 const QuizAttackStart = () => {
   const { t } = useI18n();
@@ -29,14 +29,23 @@ const QuizAttackStart = () => {
     useState<boolean>(false);
   const [roomPassword, setRoomPassword] = useState<string>("");
   const [copied, setCopied] = useState<boolean>(false);
-  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
-  const [userAvatar, setUserAvatar] = useState<any>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [showManagePacksModal, setShowManagePacksModal] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const { containerVariants, slideInLeft, slideInRight, scaleIn, fadeUp } =
     useEnhancedAnimations();
+
+  // State for tab management
+  const [activeTab, setActiveTab] = useState<string>("gameMode");
+
+  // Avatar states
+  const [avatarConfig, setAvatarConfig] = useState<AvatarFullConfig>(
+    genConfig()
+  );
+  const [customAvatarImage, setCustomAvatarImage] = useState<string | null>(
+    null
+  );
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const [showAvatarHint, setShowAvatarHint] = useState(true);
 
   // Generate random room code
   const generateRoomCode = useCallback(() => {
@@ -60,20 +69,17 @@ const QuizAttackStart = () => {
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 1024) {
-        // Chỉ ngăn scroll trên desktop
-        document.body.style.overflow = 'hidden';
+        document.body.style.overflow = "hidden";
       } else {
-        document.body.style.overflow = 'unset';
+        document.body.style.overflow = "unset";
       }
     };
-    
-    // Gọi lần đầu khi component mount
+
     handleResize();
-    
     window.addEventListener("resize", handleResize);
     return () => {
       window.removeEventListener("resize", handleResize);
-      document.body.style.overflow = 'unset'; // Đảm bảo khôi phục scroll khi component unmount
+      document.body.style.overflow = "unset";
     };
   }, []);
 
@@ -84,9 +90,18 @@ const QuizAttackStart = () => {
         setIsMobileMenuOpen(false);
       }
     };
-    
+
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Auto-hide avatar hint after 5 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowAvatarHint(false);
+    }, 5000);
+
+    return () => clearTimeout(timer);
   }, []);
 
   const handleCopyCode = useCallback(() => {
@@ -96,47 +111,28 @@ const QuizAttackStart = () => {
     });
   }, [roomCode]);
 
-  const handleLogin = (data: {
-    username: string;
-    password: string;
-    avatar: any;
-  }) => {
-    setIsLoggedIn(true);
-    setUserAvatar(data.avatar);
-    setShowLoginModal(false);
-  };
-
-  const handleRegister = (data: {
-    username: string;
-    password: string;
-    avatar: any;
-  }) => {
-    setIsLoggedIn(true);
-    setUserAvatar(data.avatar);
-    setShowLoginModal(false);
-  };
-
   const [selectedGameMode, setSelectedGameMode] = useState("classic");
-
-  // Responsive modal handling
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 1024) {
-        setShowLoginModal(false);
-      }
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  const [selectedPack, setSelectedPack] = useState<QuizPack | null>(null);
 
   if (!mounted) {
     return (
       <div className="h-screen w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900" />
     );
   }
+
   return (
     <div className="relative min-h-screen w-full font-sans flex flex-col">
       <Header />
+
+      {/* Avatar Selection Modal */}
+      <AvatarCustomModal
+        isOpen={isAvatarModalOpen}
+        onClose={() => setIsAvatarModalOpen(false)}
+        avatarConfig={avatarConfig}
+        setAvatarConfig={setAvatarConfig}
+        customAvatarImage={customAvatarImage}
+        setCustomAvatarImage={setCustomAvatarImage}
+      />
 
       {/* Main Content */}
       <motion.main
@@ -146,7 +142,7 @@ const QuizAttackStart = () => {
         className="flex-1 mx-auto w-full max-w-7xl grid grid-cols-1 gap-4 px-4 pb-4 lg:grid-cols-12 lg:mt-0"
       >
         {/* Mobile Toggle */}
-        <motion.div variants={fadeUp} className="lg:hidden mb-4">
+        <motion.div variants={fadeUp} className="lg:hidden ">
           <motion.button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="w-full flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-purple-600/30 to-blue-600/30 border border-white/20 text-white shadow-lg"
@@ -187,45 +183,44 @@ const QuizAttackStart = () => {
                 animate={{ scale: 1 }}
                 transition={{ delay: 0.1 }}
               >
-                <h3 className="text-xl font-bold flex items-center space-x-3 justify-center text-white mb-3">
-                  <motion.div
-                    animate={{ rotate: [0, 10, -10, 0] }}
-                    transition={{
-                      duration: 2,
-                      repeat: Infinity,
-                      repeatDelay: 3,
-                    }}
+                {/* Tab Navigation for Mobile */}
+                <div className="flex mb-4 rounded-xl bg-white/5 p-1">
+                  <button
+                    onClick={() => setActiveTab("gameMode")}
+                    className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                      activeTab === "gameMode"
+                        ? "bg-[#FF6B35] text-white shadow"
+                        : "text-white/70 hover:text-white"
+                    }`}
                   >
-                    <FaGamepad className="text-orange-400" />
-                  </motion.div>
-                  <span>{t.gameModes}</span>
-                </h3>
-                <GameModeSelector
-                  selectedMode={selectedGameMode}
-                  onModeSelect={setSelectedGameMode}
-                />
-              </motion.div>
+                    Game Mode
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("quizPack")}
+                    className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                      activeTab === "quizPack"
+                        ? "bg-[#FF6B35] text-white shadow"
+                        : "text-white/70 hover:text-white"
+                    }`}
+                  >
+                    Quiz Packs
+                  </button>
+                </div>
 
-              <motion.div
-                className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur-md flex items-center justify-center"
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                <motion.button
-                  onClick={() => setShowManagePacksModal(true)}
-                  className="flex items-center gap-2 rounded-2xl bg-[#FF6B35] px-4 py-2 font-semibold text-white shadow-lg text-sm"
-                  whileHover={{ scale: 1.05, backgroundColor: "#FF7A47" }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <motion.div
-                    whileHover={{ rotate: 90 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <FaPlus />
-                  </motion.div>
-                  {t.addCustomPacks}
-                </motion.button>
+                {/* Tab Content */}
+                <div className="min-h-[200px]">
+                  {activeTab === "gameMode" ? (
+                    <GameModeSelector
+                      selectedMode={selectedGameMode}
+                      onModeSelect={setSelectedGameMode}
+                    />
+                  ) : (
+                    <QuizPackSelector
+                      selectedPack={selectedPack}
+                      onPackSelect={setSelectedPack}
+                    />
+                  )}
+                </div>
               </motion.div>
             </motion.section>
           )}
@@ -241,40 +236,45 @@ const QuizAttackStart = () => {
               className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 border border-white/20 shadow-xl"
               whileHover={{ borderColor: "rgba(255, 255, 255, 0.3)" }}
             >
-              <h3 className="text-2xl font-bold flex items-center space-x-3 justify-center text-white mb-3">
-                <motion.div
-                  animate={{ rotate: [0, 10, -10, 0] }}
-                  transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+              {/* Tab Navigation for Desktop */}
+              <div className="flex mb-4 rounded-xl bg-white/5 p-1">
+                <button
+                  onClick={() => setActiveTab("gameMode")}
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                    activeTab === "gameMode"
+                      ? "bg-[#FF6B35] text-white shadow"
+                      : "text-white/70 hover:text-white"
+                  }`}
                 >
-                  <FaGamepad className="text-orange-400" />
-                </motion.div>
-                <span>{t.gameModes}</span>
-              </h3>
-              <GameModeSelector
-                selectedMode={selectedGameMode}
-                onModeSelect={setSelectedGameMode}
-              />
-            </motion.div>
-          </motion.div>
+                  Game Mode
+                </button>
+                <button
+                  onClick={() => setActiveTab("quizPack")}
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                    activeTab === "quizPack"
+                      ? "bg-[#FF6B35] text-white shadow"
+                      : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  Quiz Packs
+                </button>
+              </div>
 
-          <motion.div
-            variants={fadeUp}
-            className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur-md flex items-center justify-center flex-1"
-          >
-            <motion.button
-              onClick={() => setShowManagePacksModal(true)}
-              className="flex items-center gap-2 rounded-2xl bg-[#FF6B35] px-6 py-3 font-semibold text-white shadow-lg ring-1 ring-white/20"
-              whileHover={{ scale: 1.05, backgroundColor: "#FF7A47" }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <motion.div
-                whileHover={{ rotate: 90 }}
-                transition={{ duration: 0.3 }}
-              >
-                <FaPlus />
-              </motion.div>
-              {t.addCustomPacks}
-            </motion.button>
+              {/* Tab Content */}
+              <div className="min-h-[300px]">
+                {activeTab === "gameMode" ? (
+                  <GameModeSelector
+                    selectedMode={selectedGameMode}
+                    onModeSelect={setSelectedGameMode}
+                  />
+                ) : (
+                  <QuizPackSelector
+                    selectedPack={selectedPack}
+                    onPackSelect={setSelectedPack}
+                  />
+                )}
+              </div>
+            </motion.div>
           </motion.div>
         </motion.section>
 
@@ -285,93 +285,70 @@ const QuizAttackStart = () => {
             whileHover={{ borderColor: "rgba(255, 255, 255, 0.2)" }}
           >
             {/* User Profile */}
-            <motion.div
-              variants={fadeUp}
-              className="flex items-center gap-3 lg:gap-4 mb-4 lg:mb-6"
-            >
-              {isLoggedIn ? (
-                <>
-                  <motion.div
-                    className="w-12 h-12 lg:w-16 lg:h-16 rounded-full bg-white/10 flex items-center justify-center overflow-hidden border-2 border-white/20"
-                    whileHover={{
-                      scale: 1.1,
-                      borderColor: "rgba(255, 107, 53, 0.5)",
-                    }}
-                  >
-                    {userAvatar ? (
-                      userAvatar.type === "avatar" ? (
-                        <Avatar
-                          className="w-full h-full"
-                          {...userAvatar.config}
-                        />
-                      ) : (
-                        <img
-                          src={userAvatar.data}
-                          alt="Avatar"
-                          className="w-full h-full object-cover"
-                        />
-                      )
-                    ) : (
-                      <FaUserCircle className="text-xl lg:text-3xl text-[#EAEAEA]" />
-                    )}
-                  </motion.div>
-                  <div>
-                    <motion.p
-                      className="text-white font-medium text-sm lg:text-base"
-                      animate={{ color: ["#FFFFFF", "#FFE4B5", "#FFFFFF"] }}
-                      transition={{ duration: 3, repeat: Infinity }}
-                    >
-                      Welcome!
-                    </motion.p>
-                    <motion.button
-                      onClick={() => setShowLoginModal(true)}
-                      className="text-[#FF6B35] text-xs lg:text-sm"
-                      whileHover={{ scale: 1.05 }}
-                    >
-                      Change account
-                    </motion.button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <motion.div
-                    className="w-12 h-12 lg:w-16 lg:h-16 rounded-full bg-white/10 flex items-center justify-center border-2 border-white/20"
-                    whileHover={{ scale: 1.1 }}
-                  >
-                    <motion.div
-                      animate={{ scale: [1, 1.1, 1], opacity: [0.7, 1, 0.7] }}
-                      transition={{ duration: 2, repeat: Infinity }}
-                    >
-                      <FaUserCircle className="text-xl lg:text-3xl text-[#EAEAEA]" />
-                    </motion.div>
-                  </motion.div>
-                  <div>
-                    <motion.button
-                      onClick={() => setShowLoginModal(true)}
-                      className="text-[#FF6B35] text-xs lg:text-sm bg-white/10 px-3 py-1 rounded-lg"
-                      whileHover={{
-                        scale: 1.05,
-                        backgroundColor: "rgba(255, 107, 53, 0.2)",
-                      }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      Login/Register
-                    </motion.button>
-                  </div>
-                </>
-              )}
-            </motion.div>
-
-            {/* Nickname Input */}
-            {!isLoggedIn && (
+            <div className="flex justify-center items-center gap-4 mb-4">
               <motion.div
                 variants={fadeUp}
-                className="mb-4 lg:mb-6 space-y-2"
-                layout
+                className="flex items-center gap-3 lg:gap-4 relative"
               >
-                <label className="block text-sm font-medium text-[#EAEAEA]">
-                  {t.nickname}
-                </label>
+                <motion.div
+                  className="w-12 h-12 lg:w-16 lg:h-16 rounded-full bg-white/10 flex items-center justify-center border-2 border-white/20 cursor-pointer overflow-hidden relative"
+                  whileHover={{ scale: 1.1 }}
+                  onClick={() => setIsAvatarModalOpen(true)}
+                  animate={{
+                    boxShadow: [
+                      "0 0 0 0 rgba(255, 107, 53, 0.7)",
+                      "0 0 0 10px rgba(255, 107, 53, 0)",
+                      "0 0 0 0 rgba(255, 107, 53, 0)",
+                    ],
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: showAvatarHint ? Infinity : 0,
+                    repeatDelay: 1,
+                  }}
+                >
+                  {customAvatarImage ? (
+                    <img
+                      src={customAvatarImage}
+                      alt="Avatar"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Avatar className="w-full h-full" {...avatarConfig} />
+                  )}
+
+                  {/* Camera icon overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity duration-300 rounded-full">
+                    <FaEye className="text-white text-lg lg:text-xl" />
+                  </div>
+                </motion.div>
+
+                {/* Avatar Hint */}
+                <AnimatePresence>
+                  {showAvatarHint && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.5 }}
+                      className="absolute bottom-3 -left-24  text-white text-sx py-1 px-2 rounded-lg whitespace-nowrap"
+                    >
+                      <motion.div
+                        animate={{ x: [0, 5, 0] }}
+                        transition={{ duration: 1, repeat: Infinity }}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Customize</span>
+                          <FaChevronRight className="text-xs" />
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+
+              {/* Nickname Input */}
+              <motion.div variants={fadeUp} className="space-y-2" layout>
                 <motion.input
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
@@ -380,7 +357,7 @@ const QuizAttackStart = () => {
                   whileFocus={{ scale: 1.02 }}
                 />
               </motion.div>
-            )}
+            </div>
 
             {/* Create Room */}
             <motion.div variants={fadeUp} className="mb-4 lg:mb-6 space-y-2">
@@ -432,7 +409,7 @@ const QuizAttackStart = () => {
                   whileTap={{ scale: 0.95 }}
                 >
                   <Link
-                    href={`lobby/${roomCode}`}
+                    href={`/lobby/${roomCode}`}
                     className="flex items-center justify-center gap-2 rounded-xl lg:rounded-2xl bg-[#FF6B35] px-4 py-2 lg:px-6 lg:py-3 font-semibold text-white shadow-lg shadow-[#FF6B35]/30 ring-1 ring-white/20 text-sm lg:text-base"
                   >
                     <motion.div whileHover={{ rotate: 90 }}>
@@ -514,82 +491,10 @@ const QuizAttackStart = () => {
                 </motion.button>
               </div>
             </motion.div>
-
-            {/* Floating Decorative Elements */}
-            <motion.div
-              className="absolute top-4 right-4 w-2 h-2 bg-purple-400/60 rounded-full"
-              animate={{ y: [0, -10, 0], opacity: [0.6, 1, 0.6] }}
-              transition={{ duration: 3, repeat: Infinity }}
-            />
-            <motion.div
-              className="absolute bottom-4 left-4 w-3 h-3 bg-blue-400/40 rounded-full"
-              animate={{ y: [0, 10, 0], opacity: [0.4, 0.8, 0.4] }}
-              transition={{ duration: 2.5, repeat: Infinity, delay: 1 }}
-            />
           </motion.div>
         </motion.section>
       </motion.main>
-
-      {/* Background Particles */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        {[...Array(4)].map((_, i) => (
-          <motion.div
-            key={i}
-            className="absolute w-1 h-1 lg:w-2 lg:h-2 bg-white/20 rounded-full"
-            style={{
-              left: `${20 + i * 20}%`,
-              top: `${30 + i * 15}%`,
-            }}
-            animate={{
-              y: [-20, 20, -20],
-              opacity: [0.2, 0.6, 0.2],
-              scale: [1, 1.5, 1],
-            }}
-            transition={{
-              duration: 4 + i,
-              repeat: Infinity,
-              delay: i * 0.8,
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Modals */}
-      <AnimatePresence>
-        {showManagePacksModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <QuestionsModal
-              isOpen={showManagePacksModal}
-              onClose={() => setShowManagePacksModal(false)}
-              t={t}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showLoginModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <LoginModal
-              isOpen={showLoginModal}
-              onClose={() => setShowLoginModal(false)}
-              onLogin={handleLogin}
-              onRegister={handleRegister}
-              t={t}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
-
 export default QuizAttackStart;
