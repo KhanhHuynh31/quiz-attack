@@ -220,3 +220,79 @@ export const translations: Record<LanguageCode, TranslationData> = {
     ],
   },
 };
+// lobbyTranslations.ts
+export interface LobbyTranslations {
+  home: string;
+  room: string;
+  players: string;
+  maxPlayers: string;
+  unlimited: string;
+  kickPlayer: string;
+  host: string;
+  ready: string;
+  notReady: string;
+  startGame: string;
+  chooseGameMode: string;
+  gameMode: string;
+  quizPacks: string;
+  copyLink: string;
+  shareRoom: string;
+  showQrCode: string;
+  settings: string;
+  timePerQuestion: string;
+  numberOfRounds: string;
+  showCorrectAnswer: string;
+  allowedPowerCards: string;
+  addCustomPack: string;
+}
+
+export const lobbyTranslations: Record<string, LobbyTranslations> = {
+  en: {
+    home: "Home",
+    room: "Room",
+    players: "Players",
+    maxPlayers: "Max Players",
+    unlimited: "Unlimited",
+    kickPlayer: "Kick Player",
+    host: "Host",
+    ready: "Ready",
+    notReady: "Not Ready",
+    startGame: "Start Game",
+    chooseGameMode: "Choose Game Mode",
+    gameMode: "Game Mode",
+    quizPacks: "Quiz Packs",
+    settings: "Settings",
+    copyLink: "Copy Link",
+    shareRoom: "Share Room",
+    showQrCode: "Show QR Code",
+    timePerQuestion: "Time per Question",
+    numberOfRounds: "Number of Rounds",
+    showCorrectAnswer: "Show Correct Answer",
+    allowedPowerCards: "Allowed Power Cards",
+    addCustomPack: "Add Custom Pack",
+  },
+  vi: {
+    home: "Trang Chủ",
+    room: "Phòng",
+    players: "Người Chơi",
+    maxPlayers: "Số Người Tối Đa",
+    unlimited: "Không Giới Hạn",
+    kickPlayer: "Đuổi Người Chơi",
+    host: "Chủ Phòng",
+    ready: "Sẵn Sàng",
+    notReady: "Chưa Sẵn Sàng",
+    startGame: "Bắt Đầu",
+    chooseGameMode: "Chọn Chế Độ Chơi",
+    gameMode: "Chế Độ Chơi",
+    quizPacks: "Gói Câu Hỏi",
+    copyLink: "Sao Chép Liên Kết",
+    shareRoom: "Chia Sẻ Phòng",
+    showQrCode: "Hiện Mã QR",
+    settings: "Cài Đặt",
+    timePerQuestion: "Thời Gian Mỗi Câu",
+    numberOfRounds: "Số Vòng",
+    showCorrectAnswer: "Hiện Đáp Án Đúng",
+    allowedPowerCards: "Thẻ Sức Mạnh Được Cho Phép",
+    addCustomPack: "Thêm Gói Tùy Chỉnh",
+  },
+};

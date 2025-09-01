@@ -1,19 +1,20 @@
 "use client";
-import React, { useState, useCallback, JSX } from "react";
+import React, { useState, JSX } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaQuestionCircle, FaGamepad, FaCheck } from "react-icons/fa";
+import { FaQuestionCircle, FaCheck } from "react-icons/fa";
 import { GiCardPlay, GiDiceTwentyFacesTwenty } from "react-icons/gi";
 import { useI18n } from "@/hooks/useI18n";
+import { GAME_MODES, GameMode } from "@/data/modeData";
 
 // Types
-interface GameMode {
-  key: string;
-  icon: JSX.Element;
+interface GameModeStyle {
   gradient: string;
+  icon: JSX.Element;
 }
 
 interface GameModeItemProps {
   mode: GameMode;
+  style: GameModeStyle;
   isSelected: boolean;
   onSelect: (modeKey: string) => void;
   t: any;
@@ -23,15 +24,13 @@ interface GameModeItemProps {
 // Enhanced Game Mode Item Component
 const GameModeItem: React.FC<GameModeItemProps> = ({
   mode,
+  style,
   isSelected,
   onSelect,
   t,
   index,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-
-  // Lấy thông tin mode từ translations
-  const modeInfo = t.modes?.[mode.key as keyof typeof t.modes];
 
   return (
     <motion.div
@@ -46,10 +45,10 @@ const GameModeItem: React.FC<GameModeItemProps> = ({
       whileTap={{ scale: 0.98 }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
-      onClick={() => onSelect(mode.key)}
+      onClick={() => onSelect(mode.mode)}
       className={`relative flex items-center space-x-4 p-4 rounded-xl cursor-pointer transition-all border overflow-hidden ${
         isSelected
-          ? `bg-gradient-to-r ${mode.gradient} border-orange-500/50 shadow-xl`
+          ? `bg-gradient-to-r ${style.gradient} border-orange-500/50 shadow-xl`
           : "bg-gradient-to-br from-white/10 to-white/5 border-white/20 hover:border-white/40"
       }`}
     >
@@ -74,7 +73,7 @@ const GameModeItem: React.FC<GameModeItemProps> = ({
           transition={{ duration: 0.4 }}
           className="flex-shrink-0 p-3 rounded-lg bg-white/10"
         >
-          {mode.icon}
+          {style.icon}
         </motion.div>
 
         <div className="flex-1">
@@ -82,14 +81,14 @@ const GameModeItem: React.FC<GameModeItemProps> = ({
             animate={isHovered ? { x: 5 } : { x: 0 }}
             className="font-bold text-lg"
           >
-            {modeInfo?.title || mode.key}
+            {mode.name}
           </motion.h4>
           <motion.p
             animate={isHovered ? { x: 5 } : { x: 0 }}
             transition={{ delay: 0.05 }}
             className="text-sm text-white/70 leading-relaxed"
           >
-            {modeInfo?.desc || ""}
+            {mode.description}
           </motion.p>
         </div>
 
@@ -125,32 +124,30 @@ export const GameModeSelector: React.FC<GameModeSelectorProps> = ({
 }) => {
   const { t } = useI18n();
 
-  // Game modes configuration with react-icons
-  const MODES: GameMode[] = [
-    {
-      key: "classic",
+  // Style configuration mapped by mode key
+  const MODE_STYLES: Record<string, GameModeStyle> = {
+    classic: {
       icon: <FaQuestionCircle className="text-2xl text-blue-400" />,
       gradient: "from-blue-500/30 to-blue-600/30",
     },
-    {
-      key: "battle",
+    battle: {
       icon: <GiCardPlay className="text-2xl text-red-400" />,
       gradient: "from-red-500/30 to-red-600/30",
     },
-    {
-      key: "pve",
+    pve: {
       icon: <GiDiceTwentyFacesTwenty className="text-2xl text-purple-400" />,
       gradient: "from-purple-500/30 to-purple-600/30",
     },
-  ];
+  };
 
   return (
       <div className="space-y-4 p-3">
-        {MODES.map((mode, index) => (
+        {GAME_MODES.map((mode, index) => (
           <GameModeItem
-            key={mode.key}
+            key={mode.id}
             mode={mode}
-            isSelected={selectedMode === mode.key}
+            style={MODE_STYLES[mode.mode]}
+            isSelected={selectedMode === mode.mode}
             onSelect={onModeSelect}
             t={t}
             index={index}
