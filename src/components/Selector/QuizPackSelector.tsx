@@ -1,10 +1,11 @@
 // File: QuizPackSelector.tsx
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaBook, FaPlus, FaCheck } from "react-icons/fa";
 import Link from "next/link";
-import { DEFAULT_QUIZ_PACKS, QuizPack } from "@/data/quizData";
+import { DEFAULT_QUIZ_PACKS } from "@/data/quizData";
+import { QuizPack } from "@/types/type";
 
 interface QuizPackItemProps {
   pack: QuizPack;
@@ -109,7 +110,7 @@ const QuizPackItem: React.FC<QuizPackItemProps> = ({
 // Main QuizPackSelector Component
 interface QuizPackSelectorProps {
   selectedPack: QuizPack | null;
-  onPackSelect: (pack: QuizPack | null) => void;
+  onPackSelect: (pack: QuizPack) => void;
   customPacks?: QuizPack[]; // Thêm prop để truyền custom packs từ bên ngoài
 }
 
@@ -120,10 +121,23 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
 }) => {
   // Kết hợp default packs và custom packs
   const allPacks = [...DEFAULT_QUIZ_PACKS, ...customPacks];
+  
+  // Đảm bảo luôn có một pack được chọn mặc định
+  useEffect(() => {
+    if (!selectedPack && allPacks.length > 0) {
+      // Tìm pack đầu tiên không bị ẩn
+      const firstVisiblePack = allPacks.find(pack => !pack.isHidden);
+      if (firstVisiblePack) {
+        onPackSelect(firstVisiblePack);
+      }
+    }
+  }, [selectedPack, allPacks, onPackSelect]);
 
   const handleSelectPack = (pack: QuizPack) => {
-    const newSelection = selectedPack?.id === pack.id ? null : pack;
-    onPackSelect(newSelection);
+    // Không cho phép bỏ chọn, chỉ cho phép chọn pack khác
+    if (selectedPack?.id !== pack.id) {
+      onPackSelect(pack);
+    }
   };
 
   return (
@@ -160,13 +174,17 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
             ))}
         </motion.div>
         <motion.button
-          whileHover={{ scale: 1.05, y: -2 }}
+          whileHover={{ scale: 1.01, y: -2 }}
           whileTap={{ scale: 0.95 }}
-          className="w-full bg-gradient-to-r from-green-500/20 to-green-600/20 hover:from-green-500/30 hover:to-green-600/30 px-4 py-3 rounded-xl border border-green-500/50 transition-all font-medium shadow-lg flex items-center justify-center space-x-2 text-white"
+          className="w-full bg-gradient-to-r from-green-500/20 to-green-600/20 
+             hover:from-green-500/30 hover:to-green-600/30 
+             px-4 py-3 rounded-xl border border-green-500/50 
+             transition-all font-medium shadow-lg 
+             flex items-center justify-center text-white"
         >
           <Link
             href="/quiz-pack-manager"
-            className="flex items-center space-x-2"
+            className="w-auto inline-flex items-center space-x-2 px-3"
           >
             <FaPlus className="text-green-400" />
             <span>Add Custom Pack</span>

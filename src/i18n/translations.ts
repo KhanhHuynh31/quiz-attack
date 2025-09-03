@@ -244,6 +244,10 @@ export interface LobbyTranslations {
   showCorrectAnswer: string;
   allowedPowerCards: string;
   addCustomPack: string;
+  showAnswersDesc: string;
+  hideAnswersDesc: string;
+  powerCards: string;
+  powerCardsDesc: string;
 }
 
 export const lobbyTranslations: Record<string, LobbyTranslations> = {
@@ -270,6 +274,10 @@ export const lobbyTranslations: Record<string, LobbyTranslations> = {
     showCorrectAnswer: "Show Correct Answer",
     allowedPowerCards: "Allowed Power Cards",
     addCustomPack: "Add Custom Pack",
+    showAnswersDesc: "Players will see the correct answer after each question",
+    hideAnswersDesc: "Players won't see the correct answers during the game",
+    powerCards: "Power Cards",
+    powerCardsDesc: "Select which power cards are available during the game",
   },
   vi: {
     home: "Trang Chủ",
@@ -294,5 +302,10 @@ export const lobbyTranslations: Record<string, LobbyTranslations> = {
     showCorrectAnswer: "Hiện Đáp Án Đúng",
     allowedPowerCards: "Thẻ Sức Mạnh Được Cho Phép",
     addCustomPack: "Thêm Gói Tùy Chỉnh",
+    showAnswersDesc: "Người chơi sẽ thấy đáp án đúng sau mỗi câu hỏi",
+    hideAnswersDesc: "Người chơi sẽ không thấy đáp án đúng trong suốt trò chơi",
+    powerCards: "Thẻ Sức Mạnh",
+    powerCardsDesc: "Chọn thẻ sức mạnh được phép sử dụng trong trò chơi",
+    
   },
 };

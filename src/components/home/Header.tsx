@@ -1,7 +1,7 @@
 // components/Header.tsx
 "use client";
 import React from "react";
-import { LanguageSelector } from "@/components/LanguageSelector";
+import { LanguageSelector } from "@/components/Selector/LanguageSelector";
 import { useI18n } from "@/hooks/useI18n";
 import { motion } from "framer-motion";
 import Image from "next/image";

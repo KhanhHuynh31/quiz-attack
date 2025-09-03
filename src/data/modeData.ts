@@ -1,11 +1,7 @@
 // types/gameModes.ts
-export interface GameMode {
-  id: string;
-  mode: string;
-  name: string;
-  description: string;
-  instructions: string;
-}
+
+import { GameMode } from "@/types/type";
+
 
 export const GAME_MODES: GameMode[] = [
   {

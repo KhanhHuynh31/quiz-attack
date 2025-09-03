@@ -12,14 +12,13 @@ import {
   FaEyeSlash,
   FaBook,
   FaChevronDown,
+  FaChevronUp,
+  FaChevronLeft,
 } from "react-icons/fa";
-import Link from "next/link";
 
 // Import components
 import { QRCodeModal } from "@/components/QrCodeModal";
-import GameModeSelector from "@/components/home/GameModeSelector";
-import QuizPackSelector from "@/components/home/QuizPackSelector";
-import PlayerCard from "@/components/lobby/PlayerCard";
+
 import { ShareSection } from "@/components/lobby/ShareSection";
 
 // Import hooks
@@ -27,8 +26,17 @@ import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
 import { useI18n } from "@/hooks/useI18n";
 
 // Import types and translations
-import { GameSettings, Player, QuizPack } from "@/types/type";
+import { GameConfig, GameSettings, Player, QuizPack } from "@/types/type";
 import { lobbyTranslations } from "@/i18n/translations";
+import GameSettingSelector from "@/components/Selector/GameSetingSelector";
+import { useRouter } from "next/navigation";
+import { DEFAULT_GAME_SETTINGS, saveGameConfig } from "@/data/gameConfig";
+import GameModeSelector from "@/components/Selector/GameModeSelector";
+import QuizPackSelector from "@/components/Selector/QuizPackSelector";
+import PlayerCard from "@/components/PlayerCard";
+import { DEFAULT_QUIZ_PACKS } from "@/data/quizData";
+
+// Import the default quiz packs
 
 // Types
 type TabType = "mode" | "settings" | "packs";
@@ -39,31 +47,43 @@ interface QuizAttackLobbyProps {
 }
 
 // Constants
-const DEFAULT_GAME_SETTINGS: GameSettings = {
-  timePerQuestion: 30,
-  numberOfRounds: 10,
-  allowedCards: [
-    "boost",
-    "freeze",
-    "double",
-    "peek",
-    "shield",
-    "swap",
-    "bomb",
-    "mystery",
-    "heal",
-    "mirror",
-  ],
-  showCorrectAnswer: true,
-  maxPlayers: null,
-  selectedQuizPack: null,
-} as const;
-
 const DEFAULT_PLAYERS: Player[] = [
-  { id: "1", name: "Host Player", avatar: "👑", isHost: true, isReady: true },
-  { id: "2", name: "Player 2", avatar: "😊", isHost: false, isReady: true },
-  { id: "3", name: "Player 3", avatar: "🔥", isHost: false, isReady: false },
-  { id: "4", name: "Player 4", avatar: "⚡", isHost: false, isReady: true },
+  {
+    id: 1,
+    name: "Host Player",
+    avatar: "👑",
+    isHost: true,
+    isReady: true,
+    score: 0,
+    cards: 0,
+  },
+  {
+    id: 2,
+    name: "Player 2",
+    avatar: "😊",
+    isHost: false,
+    isReady: true,
+    score: 0,
+    cards: 0,
+  },
+  {
+    id: 3,
+    name: "Player 3",
+    avatar: "🔥",
+    isHost: false,
+    isReady: false,
+    score: 0,
+    cards: 0,
+  },
+  {
+    id: 4,
+    name: "Player 4",
+    avatar: "⚡",
+    isHost: false,
+    isReady: true,
+    score: 0,
+    cards: 0,
+  },
 ] as const;
 
 const TABS = [
@@ -98,11 +118,11 @@ const animationVariants = {
     initial: { opacity: 0, y: 20 },
     animate: { opacity: 1, y: 0 },
     exit: { opacity: 0, y: -20 },
-    transition: { 
-      type: "spring" as const, 
-      stiffness: 300, 
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
       damping: 30,
-      duration: 0.2
+      duration: 0.2,
     },
   },
 } as const;
@@ -166,28 +186,32 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
 
   // State
   const [players, setPlayers] = useState<Player[]>(initialPlayers);
-  const [gameSettings, setGameSettings] = useState<GameSettings>(
-    DEFAULT_GAME_SETTINGS
-  );
+  const [gameSettings, setGameSettings] = useState<GameSettings>({
+    ...DEFAULT_GAME_SETTINGS,
+    selectedQuizPack: DEFAULT_QUIZ_PACKS[0] // Set first quiz pack as default
+  });
   const [showQRCode, setShowQRCode] = useState<boolean>(false);
   const [showRoomCode, setShowRoomCode] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<TabType>("mode");
   const [selectedGameMode, setSelectedGameMode] = useState<string>("classic");
   const [isMobileDropdownOpen, setIsMobileDropdownOpen] = useState(false);
-  
-  // Add state for tab transition to prevent content flashing
   const [isTabChanging, setIsTabChanging] = useState(false);
+  const [showPlayersOnMobile, setShowPlayersOnMobile] = useState(false);
+
+  // Router
+  const router = useRouter();
 
   // Effect to handle window resize and close dropdown on desktop
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 768) {
         setIsMobileDropdownOpen(false);
+        setShowPlayersOnMobile(false);
       }
     };
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   // Computed values
@@ -206,15 +230,24 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     []
   );
 
-  const handleKickPlayer = useCallback((playerId: string) => {
+  const handleKickPlayer = useCallback((playerId: number) => {
     setPlayers((prev) => prev.filter((player) => player.id !== playerId));
   }, []);
 
   const handleStartGame = useCallback(() => {
-    console.log("Starting game with settings:", gameSettings);
-    console.log("Selected mode:", selectedGameMode);
-    console.log("Players:", players);
-  }, [gameSettings, selectedGameMode, players]);
+    const gameConfig: GameConfig = {
+      gameSettings,
+      selectedGameMode,
+      players,
+      roomCode,
+    };
+
+    // Save configuration using the game config module
+    saveGameConfig(roomCode, gameConfig);
+
+    // Navigate to play page
+    router.push(`/play/${roomCode}`);
+  }, [gameSettings, selectedGameMode, players, roomCode, router]);
 
   const handleToggleRoomCodeVisibility = useCallback(() => {
     setShowRoomCode((prev) => !prev);
@@ -242,17 +275,25 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   }, [gameSettings.maxPlayers, handleSettingChange]);
 
   // Handle tab change with proper state management
-  const handleTabChange = useCallback((newTab: TabType) => {
-    if (newTab === activeTab) return;
-    
-    setIsTabChanging(true);
-    
-    // Use a small delay to ensure proper state transition
-    setTimeout(() => {
-      setActiveTab(newTab);
-      setIsTabChanging(false);
-    }, 50);
-  }, [activeTab]);
+  const handleTabChange = useCallback(
+    (newTab: TabType) => {
+      if (newTab === activeTab) return;
+
+      setIsTabChanging(true);
+
+      // Use a small delay to ensure proper state transition
+      setTimeout(() => {
+        setActiveTab(newTab);
+        setIsTabChanging(false);
+      }, 50);
+    },
+    [activeTab]
+  );
+
+  // Toggle players list on mobile
+  const togglePlayersOnMobile = useCallback(() => {
+    setShowPlayersOnMobile((prev) => !prev);
+  }, []);
 
   // Render helpers
   const renderMaxPlayersControls = () => (
@@ -320,7 +361,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       variants={staggerChildren}
       initial="hidden"
       animate="visible"
-      className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-3 mb-6 flex-shrink-0 justify-between flex-wrap"
+      className="flex flex-col-reverse gap-5 md:flex-row space-y-4 md:space-y-0 md:space-x-3 mb-6 flex-shrink-0 justify-between flex-wrap"
     >
       {/* Mobile Dropdown */}
       <div className="block md:hidden relative w-full">
@@ -332,11 +373,17 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
         >
           <div className="flex items-center space-x-3">
             {(() => {
-              const IconComponent = TABS.find(tab => tab.key === activeTab)?.icon || FaCog;
+              const IconComponent =
+                TABS.find((tab) => tab.key === activeTab)?.icon || FaCog;
               return <IconComponent />;
             })()}
             <span className="font-medium">
-              {t[TABS.find(tab => tab.key === activeTab)?.labelKey || 'settings']}
+              {
+                t[
+                  TABS.find((tab) => tab.key === activeTab)?.labelKey ||
+                    "settings"
+                ]
+              }
             </span>
           </div>
           <motion.div
@@ -373,7 +420,9 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
                     }`}
                   >
                     <IconComponent />
-                    <span className="text-sm font-medium">{t[tab.labelKey]}</span>
+                    <span className="text-sm font-medium">
+                      {t[tab.labelKey]}
+                    </span>
                   </motion.button>
                 );
               })}
@@ -421,7 +470,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       >
         <motion.button
           whileHover={{
-            scale: 1.08,
+            scale: 1.02,
             y: -3,
             boxShadow: "0 20px 40px rgba(34, 197, 94, 0.3)",
           }}
@@ -452,9 +501,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             >
               <FaPlay className="text-xl md:text-2xl" />
             </motion.div>
-            <Link href={`/play/${roomCode}`} className="text-center">
-              <span>{t.startGame}</span>
-            </Link>
+            <span>{t.startGame}</span>
           </div>
         </motion.button>
       </motion.div>
@@ -483,7 +530,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           <motion.div
             key={`tab-${activeTab}`} // Unique key for each tab
             {...animationVariants.tabContent}
-            className="h-full overflow-y-auto space-y-6 pr-3"
+            className="h-full overflow-y-auto space-y-6 p-3"
           >
             {activeTab === "mode" && (
               <>
@@ -544,9 +591,10 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
                 </motion.h3>
 
                 {/* Settings content would go here */}
-                <div className="text-white/70">
-                  Settings configuration will be implemented here
-                </div>
+                <GameSettingSelector
+                  settings={gameSettings}
+                  onSettingChange={handleSettingChange}
+                />
               </>
             )}
           </motion.div>
@@ -594,7 +642,9 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             Quiz Attack
           </motion.h1>
           <div className="flex items-center justify-center space-x-2 md:space-x-3 mt-2">
-            <span className="text-xs md:text-sm text-white/70 font-medium">{t.room}:</span>
+            <span className="text-xs md:text-sm text-white/70 font-medium">
+              {t.room}:
+            </span>
             <div className="flex items-center space-x-2 bg-white/10 px-2 py-1 md:px-3 md:py-1 rounded-lg">
               <span className="text-xs md:text-sm font-mono font-bold">
                 {maskedRoomCode}
@@ -617,13 +667,41 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
 
       {/* Main Content */}
       <main className="flex-1 px-4 md:px-6 pb-6 overflow-y-auto md:overflow-hidden flex flex-col">
+        {/* Mobile Toggle Players Button */}
+        <div className="block md:hidden mb-4">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={togglePlayersOnMobile}
+            className={`flex items-center justify-center w-full p-3 bg-white/15 rounded-xl border border-white/20 ${
+              showPlayersOnMobile ? "hidden" : "flex"
+            }`}
+          >
+            <div className="flex items-center space-x-3">
+              <FaUsers className="text-blue-400" />
+              <span className="font-medium">
+                {playerCount}/{maxPlayersText}
+              </span>
+            </div>
+            <motion.div
+              animate={{ rotate: showPlayersOnMobile ? 180 : 0 }}
+              transition={{ duration: 0.2 }}
+              className="ml-2"
+            >
+              <FaChevronUp />
+            </motion.div>
+          </motion.button>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 h-full max-w-8xl mx-auto w-full flex-1 min-h-0 md:overflow-hidden">
           {/* Players List - Left */}
           <motion.section
             variants={slideInLeft}
             initial="hidden"
             animate="visible"
-            className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 md:p-6 flex flex-col h-full overflow-hidden border border-white/20 shadow-xl"
+            className={`bg-white/10 backdrop-blur-lg rounded-2xl p-4 md:p-6 flex flex-col h-full overflow-hidden border border-white/20 shadow-xl ${
+              showPlayersOnMobile ? "block" : "hidden md:block"
+            }`}
             aria-label="Players list"
           >
             <motion.div
@@ -646,6 +724,13 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
                   {t.players} ({playerCount}/{maxPlayersText})
                 </h2>
               </div>
+              <button
+                className="md:hidden text-white/70 hover:text-white"
+                onClick={togglePlayersOnMobile}
+                aria-label={t.players}
+              >
+                <FaChevronLeft />
+              </button>
             </motion.div>
 
             {renderMaxPlayersControls()}
@@ -679,7 +764,9 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             variants={slideInRight}
             initial="hidden"
             animate="visible"
-            className="lg:col-span-2 bg-white/10 backdrop-blur-lg rounded-2xl p-4 md:p-6 flex flex-col h-full overflow-hidden border border-white/20 shadow-xl"
+            className={`lg:col-span-2 bg-white/10 backdrop-blur-lg rounded-2xl p-4 md:p-6 flex flex-col h-full overflow-hidden border border-white/20 shadow-xl ${
+              showPlayersOnMobile ? "hidden md:flex" : "flex"
+            }`}
             aria-label="Game configuration"
           >
             <ShareSection

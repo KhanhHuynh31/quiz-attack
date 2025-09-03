@@ -9,7 +9,7 @@ import { Player } from "@/types/type";
 
 interface PlayerCardProps {
   player: Player;
-  onKick: (id: string) => void;
+  onKick: (id: number) => void;
   index: number;
 }
 

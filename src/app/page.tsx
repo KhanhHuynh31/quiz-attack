@@ -18,9 +18,9 @@ import Link from "next/link";
 
 // Import components
 import { Header } from "@/components/home/Header";
-import GameModeSelector from "@/components/home/GameModeSelector";
-import QuizPackSelector from "@/components/home/QuizPackSelector";
-import AvatarCustomModal from "@/components/AvatarCustomModal";
+import GameModeSelector from "@/components/Selector/GameModeSelector";
+import QuizPackSelector from "@/components/Selector/QuizPackSelector";
+import AvatarCustomModal from "@/components/home/AvatarCustomModal";
 
 // Import hooks and types
 import { useI18n } from "@/hooks/useI18n";
