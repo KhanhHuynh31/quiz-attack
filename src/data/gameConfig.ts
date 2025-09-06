@@ -3,7 +3,7 @@ import { GameConfig, GameSettings } from "@/types/type";
 
 export const DEFAULT_GAME_SETTINGS: GameSettings = {
   timePerQuestion: 30,
-  numberOfRounds: 10,
+  numberOfQuestion: 10,
   allowedCards: [],
   showCorrectAnswer: true,
   maxPlayers: null,

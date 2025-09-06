@@ -29,14 +29,14 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
   const [customTimeInput, setCustomTimeInput] = useState(false);
   const [customRoundInput, setCustomRoundInput] = useState(false);
   const [tempCustomTime, setTempCustomTime] = useState(settings.timePerQuestion.toString());
-  const [tempCustomRounds, setTempCustomRounds] = useState(settings.numberOfRounds.toString());
+  const [tempCustomRounds, setTempCustomRounds] = useState(settings.numberOfQuestion.toString());
   const [selectedCardType, setSelectedCardType] = useState<string>("all");
 
-  // Memoized calculations
-  const allCardIds = useMemo(() => powerCards.map(card => card.id), []);
+  // Memoized calculations - ensure card IDs are strings
+  const allCardIds = useMemo(() => powerCards.map(card => card.id.toString()), []);
   
   const cardTypes = useMemo(() => 
-    ["all", ...new Set(powerCards.map(card => card.type))],
+    ["all", ...new Set(powerCards.map(card => card.type))].filter(Boolean) as string[],
     []
   );
 
@@ -53,7 +53,8 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
     if (!settings.allowedCards || settings.allowedCards.length === 0) {
       return allCardIds;
     }
-    return settings.allowedCards;
+    // Ensure all values are strings
+    return settings.allowedCards.map(card => card.toString());
   }, [settings.allowedCards, allCardIds]);
 
   // Initialize allowed cards if empty (ensures default selection)
@@ -61,13 +62,13 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
     if (!settings.allowedCards || settings.allowedCards.length === 0) {
       onSettingChange("allowedCards", allCardIds);
     }
-  }, []); // Empty dependency để chỉ chạy 1 lần khi mount
+  }, [allCardIds, onSettingChange, settings.allowedCards]);
 
   // Update temp values when settings change
   useEffect(() => {
     setTempCustomTime(settings.timePerQuestion.toString());
-    setTempCustomRounds(settings.numberOfRounds.toString());
-  }, [settings.timePerQuestion, settings.numberOfRounds]);
+    setTempCustomRounds(settings.numberOfQuestion.toString());
+  }, [settings.timePerQuestion, settings.numberOfQuestion]);
 
   // Callback functions
   const handleCustomTimeSubmit = useCallback(() => {
@@ -81,7 +82,7 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
   const handleCustomRoundsSubmit = useCallback(() => {
     const roundsValue = parseInt(tempCustomRounds);
     if (roundsValue >= ROUND_LIMITS.min && roundsValue <= ROUND_LIMITS.max) {
-      onSettingChange("numberOfRounds", roundsValue);
+      onSettingChange("numberOfQuestion", roundsValue);
       setCustomRoundInput(false);
     }
   }, [tempCustomRounds, onSettingChange]);
@@ -108,7 +109,7 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
   }, [effectiveAllowedCards, onSettingChange]);
 
   const handleToggleAllCards = useCallback(() => {
-    const filteredCardIds = filteredCards.map(card => card.id);
+    const filteredCardIds = filteredCards.map(card => card.id.toString());
     const currentCards = effectiveAllowedCards;
     const allFilteredSelected = filteredCardIds.every(id => 
       currentCards.includes(id)
@@ -138,13 +139,13 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
 
   // Helper function to check if a card is selected
   const isCardSelected = useCallback((cardId: string) => 
-    effectiveAllowedCards.includes(cardId),
+    effectiveAllowedCards.includes(cardId.toString()),
     [effectiveAllowedCards]
   );
 
   // Check if all filtered cards are selected
   const allFilteredCardsSelected = useMemo(() => 
-    filteredCards.every(card => effectiveAllowedCards.includes(card.id)),
+    filteredCards.every(card => effectiveAllowedCards.includes(card.id.toString())),
     [filteredCards, effectiveAllowedCards]
   );
 
@@ -260,17 +261,17 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
             >
               <FaSyncAlt className="text-green-400 text-xl" />
             </motion.div>
-            <span className="font-semibold text-white">{t.numberOfRounds}</span>
+            <span className="font-semibold text-white">{t.numberOfQuestion}</span>
           </div>
           <div className="flex items-center space-x-2">
             <span className="bg-green-500/20 text-green-300 px-3 py-1 rounded-lg text-sm font-bold">
-              {settings.numberOfRounds}
+              {settings.numberOfQuestion}
             </span>
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
               onClick={() => setCustomRoundInput(!customRoundInput)}
-              className="p-1 text-green-400 hover:green-300 transition-colors"
+              className="p-1 text-green-400 hover:text-green-300 transition-colors"
               aria-label="Edit custom rounds"
             >
               <FaEdit />
@@ -327,9 +328,9 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
                 boxShadow: "0 0 8px rgb(34, 197, 94)"
               }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => onSettingChange("numberOfRounds", rounds)}
+              onClick={() => onSettingChange("numberOfQuestion", rounds)}
               className={`p-3 rounded-xl text-sm font-medium transition-all ${
-                settings.numberOfRounds === rounds
+                settings.numberOfQuestion === rounds
                   ? "bg-green-600 text-white shadow-lg shadow-green-500/50"
                   : "bg-white/10 hover:bg-white/20"
               }`}
@@ -451,7 +452,7 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
             className="grid grid-cols-1 md:grid-cols-2 gap-3"
           >
             {filteredCards.map((card, index) => {
-              const isEnabled = isCardSelected(card.id);
+              const isEnabled = isCardSelected(card.id.toString());
               return (
                 <motion.div
                   key={card.id}
@@ -464,7 +465,7 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
                       ? `bg-gradient-to-r ${card.color} border-transparent shadow-lg` 
                       : "bg-gray-800/50 border-gray-700 opacity-70"
                   }`}
-                  onClick={() => handleCardToggle(card.id)}
+                  onClick={() => handleCardToggle(card.id.toString())}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -517,7 +518,7 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
                   
                   {/* Type badge */}
                   <div className={`absolute bottom-2 right-2 text-xs px-2 py-1 rounded-full ${isEnabled ? "bg-black/30 text-white/90" : "bg-gray-700/70 text-gray-400"}`}>
-                    {card.type}
+                    {card.type || "unknown"}
                   </div>
                 </motion.div>
               );

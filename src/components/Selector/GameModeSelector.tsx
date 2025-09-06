@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FaQuestionCircle, FaCheck } from "react-icons/fa";
 import { GiCardPlay, GiDiceTwentyFacesTwenty } from "react-icons/gi";
 import { useI18n } from "@/hooks/useI18n";
-import { GAME_MODES, GameMode } from "@/data/modeData";
+import { GameMode } from "@/types/type";
+import { GAME_MODES } from "@/data/modeData";
 
 // Types
 interface GameModeStyle {

@@ -240,7 +240,6 @@ export interface LobbyTranslations {
   showQrCode: string;
   settings: string;
   timePerQuestion: string;
-  numberOfRounds: string;
   showCorrectAnswer: string;
   allowedPowerCards: string;
   addCustomPack: string;
@@ -248,6 +247,7 @@ export interface LobbyTranslations {
   hideAnswersDesc: string;
   powerCards: string;
   powerCardsDesc: string;
+  numberOfQuestion: string
 }
 
 export const lobbyTranslations: Record<string, LobbyTranslations> = {
@@ -270,7 +270,6 @@ export const lobbyTranslations: Record<string, LobbyTranslations> = {
     shareRoom: "Share Room",
     showQrCode: "Show QR Code",
     timePerQuestion: "Time per Question",
-    numberOfRounds: "Number of Rounds",
     showCorrectAnswer: "Show Correct Answer",
     allowedPowerCards: "Allowed Power Cards",
     addCustomPack: "Add Custom Pack",
@@ -278,6 +277,7 @@ export const lobbyTranslations: Record<string, LobbyTranslations> = {
     hideAnswersDesc: "Players won't see the correct answers during the game",
     powerCards: "Power Cards",
     powerCardsDesc: "Select which power cards are available during the game",
+    numberOfQuestion: "Number of Questions"
   },
   vi: {
     home: "Trang Chủ",
@@ -298,7 +298,6 @@ export const lobbyTranslations: Record<string, LobbyTranslations> = {
     showQrCode: "Hiện Mã QR",
     settings: "Cài Đặt",
     timePerQuestion: "Thời Gian Mỗi Câu",
-    numberOfRounds: "Số Vòng",
     showCorrectAnswer: "Hiện Đáp Án Đúng",
     allowedPowerCards: "Thẻ Sức Mạnh Được Cho Phép",
     addCustomPack: "Thêm Gói Tùy Chỉnh",
@@ -306,6 +305,6 @@ export const lobbyTranslations: Record<string, LobbyTranslations> = {
     hideAnswersDesc: "Người chơi sẽ không thấy đáp án đúng trong suốt trò chơi",
     powerCards: "Thẻ Sức Mạnh",
     powerCardsDesc: "Chọn thẻ sức mạnh được phép sử dụng trong trò chơi",
-    
+    numberOfQuestion: "Số lượng câu hỏi"
   },
 };

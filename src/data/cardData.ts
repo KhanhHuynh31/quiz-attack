@@ -1,90 +1,93 @@
-// src/data/powerCards.ts
-export interface PowerCard {
-  id: string;
-  name: string;
-  type: string;
-  description: string;
-  value?: number;
-  emoji: string;
-  color: string;
-}
+import { Card } from "@/types/type";
 
-export const powerCards: PowerCard[] = [
-  // --- Offensive / Quấy rối ---
+
+export const powerCards: Card[] = [
+  // --- Time manipulation ---
   {
-    id: "blurVision",
+    id: 1,
+    name: "Time Reducer",
+    type: "offensive",
+    description: "Giảm thời gian trả lời của đối thủ đi 5 giây",
+    emoji: "⏰",
+    color: "from-red-500 to-orange-500",
+    effect: { type: "time", value: -5 }
+  },
+  {
+    id: 2,
+    name: "Extra Time",
+    type: "defensive",
+    description: "Thêm 5 giây vào câu hỏi hiện tại của bạn",
+    emoji: "🕒",
+    color: "from-green-500 to-emerald-600",
+    effect: { type: "time", value: 5 }
+  },
+
+  // --- CSS/UI disruption ---
+  {
+    id: 3,
     name: "Blur Vision",
     type: "offensive",
     description: "Làm mờ đáp án đối thủ trong 3 giây",
     emoji: "👓",
-    color: "from-gray-500 to-gray-700"
+    color: "from-gray-500 to-gray-700",
+    effect: { type: "css", effect: "blur(4px)" }
   },
   {
-    id: "shuffleAnswers",
-    name: "Shuffle Answers",
+    id: 4,
+    name: "Mirror Screen",
     type: "offensive",
-    description: "Xáo trộn lại vị trí các đáp án của đối thủ",
-    emoji: "🔀",
-    color: "from-pink-500 to-rose-500"
+    description: "Đảo ngược toàn bộ UI của đối thủ trong 5 giây",
+    emoji: "🪞",
+    color: "from-violet-600 to-indigo-500",
+    effect: { type: "css", effect: "transform: rotate(180deg)" }
+  },
+
+  // --- Score manipulation ---
+  {
+    id: 5,
+    name: "Double Points",
+    type: "boost",
+    description: "Điểm câu hỏi này x2",
+    emoji: "✨",
+    color: "from-yellow-400 to-orange-500",
+    effect: { type: "score", value: 2 }
   },
   {
-    id: "fakeOption",
+    id: 6,
+    name: "Point Steal",
+    type: "offensive",
+    description: "Ăn cắp 50 điểm từ đối thủ",
+    emoji: "🦹",
+    color: "from-red-600 to-black",
+    effect: { type: "score", value: -50 }
+  },
+
+  // --- Answer manipulation ---
+  {
+    id: 7,
+    name: "Remove Option",
+    type: "defensive",
+    description: "Loại bỏ 1 đáp án sai khỏi màn hình của bạn",
+    emoji: "❌",
+    color: "from-blue-500 to-cyan-500",
+    effect: { type: "answer", mode: "remove", count: 1 }
+  },
+  {
+    id: 8,
     name: "Fake Option",
     type: "offensive",
     description: "Thêm 1 đáp án giả vào màn hình đối thủ",
     emoji: "🕵️",
-    color: "from-orange-500 to-red-600"
+    color: "from-orange-500 to-red-600",
+    effect: { type: "answer", mode: "fake", count: 1 }
   },
   {
-    id: "mirrorScreen",
-    name: "Mirror Screen",
+    id: 9,
+    name: "Lock Answer",
     type: "offensive",
-    description: "Đảo ngược giao diện câu hỏi của đối thủ trong 5 giây",
-    emoji: "🪞",
-    color: "from-violet-600 to-indigo-500"
-  },
-  {
-    id: "answerLock",
-    name: "Answer Lock",
-    type: "offensive",
-    description: "Khóa một đáp án bất kỳ của đối thủ",
+    description: "Khóa 1 đáp án bất kỳ của đối thủ",
     emoji: "🔒",
-    color: "from-yellow-600 to-orange-600"
-  },
-
-  // --- Defensive ---
-  {
-    id: "clearMind",
-    name: "Clear Mind",
-    type: "defensive",
-    description: "Hủy bỏ hiệu ứng quấy rối hiện tại",
-    emoji: "🧘",
-    color: "from-emerald-500 to-green-600"
-  },
-  {
-    id: "reflect",
-    name: "Reflect",
-    type: "defensive",
-    description: "Phản ngược card đối thủ định dùng lên chính họ",
-    emoji: "🪩",
-    color: "from-cyan-500 to-sky-500"
-  },
-
-  // --- Fun / Troll ---
-  {
-    id: "emojiRain",
-    name: "Emoji Rain",
-    type: "offensive",
-    description: "Spam icon rơi loạn xạ trên màn hình đối thủ",
-    emoji: "😂",
-    color: "from-fuchsia-500 to-purple-700"
-  },
-  {
-    id: "slowMotion",
-    name: "Slow Motion",
-    type: "offensive",
-    description: "Làm chậm UI và thao tác của đối thủ trong vài giây",
-    emoji: "🐌",
-    color: "from-blue-400 to-indigo-600"
+    color: "from-yellow-600 to-orange-600",
+    effect: { type: "answer", mode: "lock", count: 1 }
   }
 ];
