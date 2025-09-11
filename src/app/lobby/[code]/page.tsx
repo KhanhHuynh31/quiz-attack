@@ -35,6 +35,8 @@ import GameModeSelector from "@/components/Selector/GameModeSelector";
 import QuizPackSelector from "@/components/Selector/QuizPackSelector";
 import PlayerCard from "@/components/PlayerCard";
 import { DEFAULT_QUIZ_PACKS } from "@/data/quizData";
+import { LanguageSelector } from "@/components/Selector/LanguageSelector";
+import Link from "next/link";
 
 // Import the default quiz packs
 
@@ -188,7 +190,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   const [players, setPlayers] = useState<Player[]>(initialPlayers);
   const [gameSettings, setGameSettings] = useState<GameSettings>({
     ...DEFAULT_GAME_SETTINGS,
-    selectedQuizPack: DEFAULT_QUIZ_PACKS[0] // Set first quiz pack as default
+    selectedQuizPack: DEFAULT_QUIZ_PACKS[0], // Set first quiz pack as default
   });
   const [showQRCode, setShowQRCode] = useState<boolean>(false);
   const [showRoomCode, setShowRoomCode] = useState<boolean>(false);
@@ -476,7 +478,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           }}
           whileTap={{ scale: 0.95 }}
           onClick={handleStartGame}
-          className="relative flex items-center space-x-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 px-8 py-4 md:px-16 md:py-5 rounded-2xl font-bold text-lg md:text-xl shadow-2xl transition-all overflow-hidden border border-green-400/50 w-full md:w-auto"
+          className="relative flex items-center space-x-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 px-8 py-4  rounded-2xl font-bold text-lg md:text-xl shadow-2xl transition-all overflow-hidden border border-green-400/50 w-full md:w-auto"
           aria-label="Start game"
         >
           {/* Animated background effect */}
@@ -616,6 +618,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           className="flex items-center space-x-3 bg-white/10 backdrop-blur-lg px-4 py-3 md:px-6 md:py-3 rounded-xl hover:bg-white/20 transition-all border border-white/20 shadow-lg"
           aria-label="Go home"
         >
+          <Link href="/" className="flex items-center space-x-3">
           <motion.div
             animate={{ rotate: [0, -10, 10, 0] }}
             transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
@@ -623,6 +626,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             <FaHome className="text-xl text-blue-400" />
           </motion.div>
           <span className="font-medium text-sm md:text-base">{t.home}</span>
+          </Link>
         </motion.button>
 
         <motion.div
@@ -661,8 +665,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             </div>
           </div>
         </motion.div>
-
-        <div className="w-8 md:w-10" role="presentation" />
+        <LanguageSelector />
       </motion.header>
 
       {/* Main Content */}
@@ -735,7 +738,8 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
 
             {renderMaxPlayersControls()}
 
-            {/* Players List with Scroll */}
+  {/* Scrollable content */}
+
             <motion.div
               variants={staggerChildren}
               initial="hidden"
