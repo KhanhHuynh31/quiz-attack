@@ -5,7 +5,7 @@ import { FaChevronDown } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import Flag from "react-world-flags";
 import { useI18n } from "@/hooks/useI18n";
-import { LanguageCode } from "@/i18n";
+import { LanguageCode } from "@/i18n/translations";
 
 interface LanguageSelectorProps {
   className?: string;
