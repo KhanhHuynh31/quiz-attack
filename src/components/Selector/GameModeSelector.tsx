@@ -142,7 +142,7 @@ export const GameModeSelector: React.FC<GameModeSelectorProps> = ({
   };
 
   return (
-      <div className="space-y-4 p-3">
+      <div className="space-y-4 p-4">
         {GAME_MODES.map((mode, index) => (
           <GameModeItem
             key={mode.id}

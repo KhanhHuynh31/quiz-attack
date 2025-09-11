@@ -38,7 +38,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index }) => {
       }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
-      className={`relative flex m-1 items-center justify-between p-4 rounded-xl cursor-pointer overflow-hidden transition-all duration-300 ${
+      className={`flex m-1 items-center justify-between p-4 rounded-xl cursor-pointer overflow-hidden transition-all duration-300 ${
         player.isReady
           ? "bg-gradient-to-r from-green-500/20 to-green-600/20 border-green-500/40"
           : "bg-gradient-to-r from-red-500/20 to-red-600/20 border-red-500/40"

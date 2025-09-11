@@ -7,19 +7,19 @@ export const powerCards: Card[] = [
     id: 1,
     name: "Time Reducer",
     type: "offensive",
-    description: "Giảm thời gian trả lời của đối thủ đi 5 giây",
-    emoji: "⏰",
+    description: "Giảm thời gian trả lời của đối thủ đi 30 giây",
+    emoji: "⏳",
     color: "from-red-500 to-orange-500",
-    effect: { type: "time", value: -5 }
+    effect: { type: "time", value: -30}
   },
   {
     id: 2,
     name: "Extra Time",
     type: "defensive",
-    description: "Thêm 5 giây vào câu hỏi hiện tại của bạn",
+    description: "Thêm 30 giây vào câu hỏi hiện tại của bạn",
     emoji: "🕒",
     color: "from-green-500 to-emerald-600",
-    effect: { type: "time", value: 5 }
+    effect: { type: "time", value: 30 }
   },
 
   // --- CSS/UI disruption ---
@@ -27,19 +27,19 @@ export const powerCards: Card[] = [
     id: 3,
     name: "Blur Vision",
     type: "offensive",
-    description: "Làm mờ đáp án đối thủ trong 3 giây",
+    description: "Làm mờ đáp án đối thủ trong 30 giây",
     emoji: "👓",
     color: "from-gray-500 to-gray-700",
-    effect: { type: "css", effect: "blur(4px)" }
+    effect: { type: "css", effect: "blur(4px)", timeout: 30000 }
   },
   {
     id: 4,
     name: "Mirror Screen",
     type: "offensive",
-    description: "Đảo ngược toàn bộ UI của đối thủ trong 5 giây",
+    description: "Đảo ngược toàn bộ UI của đối thủ trong 30 giây",
     emoji: "🪞",
     color: "from-violet-600 to-indigo-500",
-    effect: { type: "css", effect: "transform: rotate(180deg)" }
+    effect: { type: "css", effect: "transform: rotate(180deg)", timeout: 30000 }
   },
 
   // --- Score manipulation ---
@@ -67,10 +67,10 @@ export const powerCards: Card[] = [
     id: 7,
     name: "Remove Option",
     type: "defensive",
-    description: "Loại bỏ 1 đáp án sai khỏi màn hình của bạn",
+    description: "Loại bỏ 2 đáp án sai khỏi màn hình của bạn",
     emoji: "❌",
     color: "from-blue-500 to-cyan-500",
-    effect: { type: "answer", mode: "remove", count: 1 }
+    effect: { type: "answer", mode: "remove", count: 2 }
   },
   {
     id: 8,
@@ -81,13 +81,4 @@ export const powerCards: Card[] = [
     color: "from-orange-500 to-red-600",
     effect: { type: "answer", mode: "fake", count: 1 }
   },
-  {
-    id: 9,
-    name: "Lock Answer",
-    type: "offensive",
-    description: "Khóa 1 đáp án bất kỳ của đối thủ",
-    emoji: "🔒",
-    color: "from-yellow-600 to-orange-600",
-    effect: { type: "answer", mode: "lock", count: 1 }
-  }
 ];

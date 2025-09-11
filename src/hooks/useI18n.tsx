@@ -2,7 +2,7 @@
 "use client";
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { translations } from "@/i18n";
-import { LanguageCode, TranslationData } from "@/types/i18n";
+import { LanguageCode, TranslationData } from "@/i18n/translations";
 
 interface I18nContextType {
   language: LanguageCode;

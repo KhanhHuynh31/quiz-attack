@@ -1,5 +1,4 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaQuestionCircle } from "react-icons/fa";
 import { ActiveCard, Card } from "@/types/type";
 
 interface CardAnimationProps {

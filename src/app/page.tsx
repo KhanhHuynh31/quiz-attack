@@ -26,6 +26,7 @@ import AvatarCustomModal from "@/components/home/AvatarCustomModal";
 import { useI18n } from "@/hooks/useI18n";
 import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
 import { QuizPack } from "@/types/type";
+import { loadFromLocalStorage, LOCAL_STORAGE_KEYS, saveToLocalStorage } from "@/hooks/useLocalStorage";
 
 // Types
 type TabType = "gameMode" | "quizPack";
@@ -101,6 +102,7 @@ const isDesktop = (): boolean => {
   return typeof window !== "undefined" && window.innerWidth >= DESKTOP_BREAKPOINT;
 };
 
+
 // Custom hooks
 const useRoomCode = (initialCode?: string) => {
   const [roomCode, setRoomCode] = useState<string>("");
@@ -153,13 +155,9 @@ const useResponsiveLayout = () => {
   useEffect(() => {
     const handleResize = () => {
       const isDesktopView = isDesktop();
-      
-      // Control body overflow
+            // Control body overflow
       if (isDesktopView) {
-        document.body.style.overflow = "hidden";
         setIsMobileMenuOpen(false);
-      } else {
-        document.body.style.overflow = "unset";
       }
     };
 
@@ -183,8 +181,12 @@ const useResponsiveLayout = () => {
 };
 
 const useAvatar = () => {
-  const [avatarConfig, setAvatarConfig] = useState<AvatarFullConfig>(DEFAULT_AVATAR_CONFIG);
-  const [customAvatarImage, setCustomAvatarImage] = useState<string | null>(null);
+  const [avatarConfig, setAvatarConfig] = useState<AvatarFullConfig>(
+    loadFromLocalStorage(LOCAL_STORAGE_KEYS.AVATAR_CONFIG, DEFAULT_AVATAR_CONFIG)
+  );
+  const [customAvatarImage, setCustomAvatarImage] = useState<string | null>(
+    loadFromLocalStorage(LOCAL_STORAGE_KEYS.CUSTOM_AVATAR_IMAGE, null)
+  );
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState<boolean>(false);
   const [showAvatarHint, setShowAvatarHint] = useState<boolean>(true);
 
@@ -196,6 +198,16 @@ const useAvatar = () => {
 
     return () => clearTimeout(timer);
   }, []);
+
+  // Save avatar config to localStorage whenever it changes
+  useEffect(() => {
+    saveToLocalStorage(LOCAL_STORAGE_KEYS.AVATAR_CONFIG, avatarConfig);
+  }, [avatarConfig]);
+
+  // Save custom avatar image to localStorage whenever it changes
+  useEffect(() => {
+    saveToLocalStorage(LOCAL_STORAGE_KEYS.CUSTOM_AVATAR_IMAGE, customAvatarImage);
+  }, [customAvatarImage]);
 
   const openAvatarModal = useCallback(() => {
     setIsAvatarModalOpen(true);
@@ -294,7 +306,7 @@ const UserProfile: React.FC<{
   <div className="flex justify-center items-center gap-4 mb-4">
     <motion.div className="flex items-center gap-3 lg:gap-4 relative">
       <motion.div
-        className="w-12 h-12 lg:w-16 lg:h-16 rounded-full bg-white/10 flex items-center justify-center border-2 border-white/20 cursor-pointer overflow-hidden relative"
+        className="w-12 h-12 lg:w-16 lg:h-16 rounded-full bg-white/10 flex items-center justify-center border-2 border-white/20 cursor-pointer relative"
         onClick={onAvatarClick}
         whileHover={animationVariants.avatarContainer.whileHover}
         animate={
@@ -545,13 +557,22 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
 
   // Local state
   const [mounted, setMounted] = useState<boolean>(false);
-  const [nickname, setNickname] = useState<string>(initialNickname);
+  const [nickname, setNickname] = useState<string>(
+    initialNickname || loadFromLocalStorage(LOCAL_STORAGE_KEYS.NICKNAME, "")
+  );
   const [joinCode, setJoinCode] = useState<string>("");
   const [isPasswordProtected, setIsPasswordProtected] = useState<boolean>(false);
   const [roomPassword, setRoomPassword] = useState<string>("");
   const [activeTab, setActiveTab] = useState<TabType>("gameMode");
   const [selectedGameMode, setSelectedGameMode] = useState<string>("classic");
   const [selectedPack, setSelectedPack] = useState<QuizPack | null>(null);
+
+  // Save nickname to localStorage whenever it changes
+  useEffect(() => {
+    if (nickname.trim()) {
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.NICKNAME, nickname);
+    }
+  }, [nickname]);
 
   // Memoized values
   const translations = useMemo(() => t, [t]);
@@ -574,6 +595,10 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     setActiveTab(tab);
   }, []);
 
+  const handleNicknameChange = useCallback((newNickname: string) => {
+    setNickname(newNickname);
+  }, []);
+
   // Loading state
   if (!mounted) {
     return (
@@ -582,7 +607,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
   }
 
   return (
-    <div className="relative min-h-screen w-full font-sans flex flex-col">
+    <div className="relative min-h-screen w-full font-sans flex flex-col overflow-x-hidden">
       <Header />
 
       {/* Avatar Selection Modal */}
@@ -676,14 +701,14 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         {/* Main Content Panel */}
         <motion.section variants={slideInRight} className="lg:col-span-8">
           <motion.div
-            className="rounded-2xl lg:rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-4 lg:p-6 shadow-2xl backdrop-blur-md relative overflow-hidden"
+            className="rounded-2xl lg:rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-4 lg:p-6 shadow-2xl backdrop-blur-md relative"
             whileHover={{ borderColor: "rgba(255, 255, 255, 0.2)" }}
           >
             {/* User Profile */}
             <motion.div variants={fadeUp}>
               <UserProfile
                 nickname={nickname}
-                onNicknameChange={setNickname}
+                onNicknameChange={handleNicknameChange}
                 avatarConfig={avatarConfig}
                 customAvatarImage={customAvatarImage}
                 showAvatarHint={showAvatarHint}

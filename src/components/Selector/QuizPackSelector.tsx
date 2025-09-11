@@ -145,6 +145,7 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
+        className="max-h-96 overflow-y-auto"
       >
         {/* Quiz Packs List */}
         <motion.div
@@ -159,7 +160,7 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
           }}
           initial="hidden"
           animate="visible"
-          className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto p-3 pr-2 mb-6"
+          className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 mb-6"
         >
           {allPacks
             .filter((p) => !p.isHidden)
@@ -183,7 +184,7 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
              flex items-center justify-center text-white"
         >
           <Link
-            href="/quiz-pack-manager"
+            href="/quiz"
             className="w-auto inline-flex items-center space-x-2 px-3"
           >
             <FaPlus className="text-green-400" />

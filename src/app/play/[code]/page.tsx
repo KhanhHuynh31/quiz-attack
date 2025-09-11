@@ -825,7 +825,7 @@ const QuizGame = () => {
         }}
       />
       <motion.div
-        className="relative min-h-screen w-full font-sans flex flex-col p-4 pb-24 overflow-auto md:overflow-hidden"
+        className="relative min-h-screen w-full font-sans flex flex-col p-4 overflow-auto lg:overflow-hidden"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5 }}

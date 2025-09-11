@@ -14,11 +14,11 @@ import {
   FaChevronDown,
   FaChevronUp,
   FaChevronLeft,
+  FaSync,
 } from "react-icons/fa";
 
 // Import components
 import { QRCodeModal } from "@/components/QrCodeModal";
-
 import { ShareSection } from "@/components/lobby/ShareSection";
 
 // Import hooks
@@ -37,6 +37,7 @@ import PlayerCard from "@/components/PlayerCard";
 import { DEFAULT_QUIZ_PACKS } from "@/data/quizData";
 import { LanguageSelector } from "@/components/Selector/LanguageSelector";
 import Link from "next/link";
+import { loadFromLocalStorage, LOCAL_STORAGE_KEYS } from "@/hooks/useLocalStorage";
 
 // Import the default quiz packs
 
@@ -55,33 +56,6 @@ const DEFAULT_PLAYERS: Player[] = [
     name: "Host Player",
     avatar: "👑",
     isHost: true,
-    isReady: true,
-    score: 0,
-    cards: 0,
-  },
-  {
-    id: 2,
-    name: "Player 2",
-    avatar: "😊",
-    isHost: false,
-    isReady: true,
-    score: 0,
-    cards: 0,
-  },
-  {
-    id: 3,
-    name: "Player 3",
-    avatar: "🔥",
-    isHost: false,
-    isReady: false,
-    score: 0,
-    cards: 0,
-  },
-  {
-    id: 4,
-    name: "Player 4",
-    avatar: "⚡",
-    isHost: false,
     isReady: true,
     score: 0,
     cards: 0,
@@ -167,10 +141,45 @@ const useRoomData = (initialRoomCode?: string) => {
   return { roomCode, shareLink };
 };
 
+// Function to load players from localStorage
+const loadPlayersFromStorage = (roomCode: string): Player[] => {
+  if (typeof window === "undefined") return DEFAULT_PLAYERS;
+
+  try {
+    const storedPlayers = localStorage.getItem(`quiz_players_${roomCode}`);
+    if (storedPlayers) {
+      return JSON.parse(storedPlayers);
+    }
+    
+    // If no players in storage, try to get from the default game config
+    const storedConfig = localStorage.getItem(`game_config_${roomCode}`);
+    if (storedConfig) {
+      const config: GameConfig = JSON.parse(storedConfig);
+      return config.players || DEFAULT_PLAYERS;
+    }
+    
+    return DEFAULT_PLAYERS;
+  } catch (error) {
+    console.error("Error loading players from localStorage:", error);
+    return DEFAULT_PLAYERS;
+  }
+};
+
+// Function to save players to localStorage
+const savePlayersToStorage = (roomCode: string, players: Player[]): void => {
+  if (typeof window === "undefined") return;
+
+  try {
+    localStorage.setItem(`quiz_players_${roomCode}`, JSON.stringify(players));
+  } catch (error) {
+    console.error("Error saving players to localStorage:", error);
+  }
+};
+
 // Main Component
 const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   initialRoomCode,
-  initialPlayers = DEFAULT_PLAYERS,
+  initialPlayers,
 }) => {
   // Hooks
   const { language } = useI18n();
@@ -187,7 +196,8 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   );
 
   // State
-  const [players, setPlayers] = useState<Player[]>(initialPlayers);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [isLoadingPlayers, setIsLoadingPlayers] = useState(true);
   const [gameSettings, setGameSettings] = useState<GameSettings>({
     ...DEFAULT_GAME_SETTINGS,
     selectedQuizPack: DEFAULT_QUIZ_PACKS[0], // Set first quiz pack as default
@@ -202,6 +212,32 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
 
   // Router
   const router = useRouter();
+
+  // Load players from localStorage on component mount
+  useEffect(() => {
+    const loadPlayers = () => {
+      setIsLoadingPlayers(true);
+      try {
+        const storedPlayers = loadPlayersFromStorage(roomCode);
+        const hostPlayer = loadFromLocalStorage(LOCAL_STORAGE_KEYS.NICKNAME, "")
+        setPlayers(storedPlayers);
+      } catch (error) {
+        console.error("Failed to load players:", error);
+        setPlayers(initialPlayers || DEFAULT_PLAYERS);
+      } finally {
+        setIsLoadingPlayers(false);
+      }
+    };
+
+    loadPlayers();
+  }, [roomCode, initialPlayers]);
+
+  // Save players to localStorage whenever players change
+  useEffect(() => {
+    if (!isLoadingPlayers) {
+      savePlayersToStorage(roomCode, players);
+    }
+  }, [players, roomCode, isLoadingPlayers]);
 
   // Effect to handle window resize and close dropdown on desktop
   useEffect(() => {
@@ -297,6 +333,38 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     setShowPlayersOnMobile((prev) => !prev);
   }, []);
 
+  // Refresh players list (simulate API call)
+  const handleRefreshPlayers = useCallback(() => {
+    setIsLoadingPlayers(true);
+    // Simulate API call with timeout
+    setTimeout(() => {
+      try {
+        const storedPlayers = loadPlayersFromStorage(roomCode);
+        setPlayers(storedPlayers);
+      } catch (error) {
+        console.error("Failed to refresh players:", error);
+      } finally {
+        setIsLoadingPlayers(false);
+      }
+    }, 800);
+  }, [roomCode]);
+
+  // Add a new player (for testing/demo purposes)
+  const handleAddDemoPlayer = useCallback(() => {
+    const newPlayerId = Math.max(...players.map(p => p.id), 0) + 1;
+    const newPlayer: Player = {
+      id: newPlayerId,
+      name: `Player ${newPlayerId}`,
+      avatar: "😊",
+      isHost: false,
+      isReady: false,
+      score: 0,
+      cards: 0,
+    };
+    
+    setPlayers(prev => [...prev, newPlayer]);
+  }, [players]);
+
   // Render helpers
   const renderMaxPlayersControls = () => (
     <motion.div
@@ -363,10 +431,10 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       variants={staggerChildren}
       initial="hidden"
       animate="visible"
-      className="flex flex-col-reverse gap-5 md:flex-row space-y-4 md:space-y-0 md:space-x-3 mb-6 flex-shrink-0 justify-between flex-wrap"
+      className="flex flex-col-reverse gap-5 lg:flex-row space-y-4 lg:space-y-0 lg:space-x-3 mb-6 flex-shrink-0 justify-between flex-wrap"
     >
       {/* Mobile Dropdown */}
-      <div className="block md:hidden relative w-full">
+      <div className="block lg:hidden relative w-full">
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
@@ -434,7 +502,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       </div>
 
       {/* Desktop Tabs */}
-      <div className="hidden ps-1 md:flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 overflow-x-auto pr-2">
+      <div className="hidden ps-1 lg:flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 overflow-x-auto pr-2">
         {TABS.map((tab) => {
           const IconComponent = tab.icon;
           const isActive = activeTab === tab.key;
@@ -446,7 +514,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => handleTabChange(tab.key)}
-              className={`flex items-center space-x-3 px-4 py-3 md:px-6 m-2 md:py-3 rounded-xl font-bold transition-all border ${
+              className={`flex items-center space-x-3 px-4 py-3 lg:px-6 m-2 lg:py-3 rounded-xl font-bold transition-all border ${
                 isActive
                   ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white border-blue-400/50 shadow-lg"
                   : "bg-white/10 text-white/70 hover:bg-white/20 border-white/20"
@@ -459,7 +527,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
               >
                 <IconComponent />
               </motion.div>
-              <span className="text-sm md:text-base">{t[tab.labelKey]}</span>
+              <span className="text-sm lg:text-base">{t[tab.labelKey]}</span>
             </motion.button>
           );
         })}
@@ -468,7 +536,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       {/* Start Game Button */}
       <motion.div
         {...animationVariants.startButton}
-        className="flex items-center justify-center flex-shrink-0 mt-4 md:mt-0 w-full md:w-auto"
+        className="flex items-center justify-center flex-shrink-0 mt-4 lg:mt-0 w-full lg:w-auto"
       >
         <motion.button
           whileHover={{
@@ -478,32 +546,54 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           }}
           whileTap={{ scale: 0.95 }}
           onClick={handleStartGame}
-          className="relative flex items-center space-x-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 px-8 py-4  rounded-2xl font-bold text-lg md:text-xl shadow-2xl transition-all overflow-hidden border border-green-400/50 w-full md:w-auto"
+          disabled={isLoadingPlayers || playerCount < 1}
+          className={`relative flex items-center space-x-4 px-8 py-4 rounded-2xl font-bold text-lg lg:text-xl shadow-2xl transition-all overflow-hidden border w-full lg:w-auto ${
+            isLoadingPlayers || playerCount < 1
+              ? "bg-gray-500/50 text-gray-300 border-gray-400/30 cursor-not-allowed"
+              : "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 border-green-400/50"
+          }`}
           aria-label="Start game"
         >
           {/* Animated background effect */}
-          <motion.div
-            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
-            animate={{ x: ["-100%", "100%"] }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: "linear",
-            }}
-          />
-
-          <div className="relative z-10 flex items-center space-x-2 md:space-x-4 justify-center">
+          {!(isLoadingPlayers || playerCount < 1) && (
             <motion.div
-              animate={{ x: [0, 5, -5, 0] }}
+              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+              animate={{ x: ["-100%", "100%"] }}
               transition={{
-                duration: 5,
+                duration: 2,
                 repeat: Infinity,
-                ease: "easeInOut",
+                ease: "linear",
               }}
-            >
-              <FaPlay className="text-xl md:text-2xl" />
-            </motion.div>
-            <span>{t.startGame}</span>
+            />
+          )}
+
+          <div className="relative z-10 flex items-center space-x-2 lg:space-x-4 justify-center">
+            {isLoadingPlayers ? (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+              >
+                <FaSync className="text-xl lg:text-2xl" />
+              </motion.div>
+            ) : (
+              <motion.div
+                animate={{ x: [0, 5, -5, 0] }}
+                transition={{
+                  duration: 5,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+              >
+                <FaPlay className="text-xl lg:text-2xl" />
+              </motion.div>
+            )}
+            <span>
+              {isLoadingPlayers
+                ? t.loading
+                : playerCount < 1
+                ? t.needPlayers
+                : t.startGame}
+            </span>
           </div>
         </motion.button>
       </motion.div>
@@ -532,14 +622,14 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           <motion.div
             key={`tab-${activeTab}`} // Unique key for each tab
             {...animationVariants.tabContent}
-            className="h-full overflow-y-auto space-y-6 p-3"
+            className="h-full overflow-y-auto overflow-hidden space-y-6 p-3"
           >
             {activeTab === "mode" && (
               <>
                 <motion.h3
                   initial={{ y: -20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
-                  className="text-xl md:text-2xl font-bold mb-4 md:mb-6 flex items-center space-x-3"
+                  className="text-xl lg:text-2xl font-bold mb-4 lg:mb-6 flex items-center space-x-3"
                 >
                   <FaGamepad className="text-orange-400" />
                   <span>{t.chooseGameMode}</span>
@@ -557,7 +647,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
                 <motion.h3
                   initial={{ y: -20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
-                  className="text-xl md:text-2xl font-bold mb-4 md:mb-6 flex items-center space-x-3"
+                  className="text-xl lg:text-2xl font-bold mb-4 lg:mb-6 flex items-center space-x-3"
                 >
                   <FaBook className="text-purple-400" />
                   <span>{t.quizPacks}</span>
@@ -577,7 +667,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
                 <motion.h3
                   initial={{ y: -20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
-                  className="text-xl md:text-2xl font-bold mb-4 md:mb-6 flex items-center space-x-3"
+                  className="text-xl lg:text-2xl font-bold mb-4 lg:mb-6 flex items-center space-x-3"
                 >
                   <motion.div
                     animate={{ rotate: 360 }}
@@ -606,26 +696,26 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   };
 
   return (
-    <div className="min-h-screen text-white flex flex-col md:max-h-screen md:overflow-hidden">
+    <div className="min-h-screen text-white flex flex-col lg:max-h-screen lg:overflow-hidden">
       {/* Header */}
       <motion.header
         {...animationVariants.header}
-        className="flex items-center justify-between p-4 md:p-6 h-24 flex-shrink-0 relative z-10"
+        className="flex items-center justify-between p-4 lg:p-6 h-24 flex-shrink-0 relative z-10"
       >
         <motion.button
           whileHover={{ scale: 1.05, y: -2 }}
           whileTap={{ scale: 0.95 }}
-          className="flex items-center space-x-3 bg-white/10 backdrop-blur-lg px-4 py-3 md:px-6 md:py-3 rounded-xl hover:bg-white/20 transition-all border border-white/20 shadow-lg"
+          className="flex items-center space-x-3 bg-white/10 backdrop-blur-lg px-4 py-3 lg:px-6 lg:py-3 rounded-xl hover:bg-white/20 transition-all border border-white/20 shadow-lg"
           aria-label="Go home"
         >
           <Link href="/" className="flex items-center space-x-3">
-          <motion.div
-            animate={{ rotate: [0, -10, 10, 0] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <FaHome className="text-xl text-blue-400" />
-          </motion.div>
-          <span className="font-medium text-sm md:text-base">{t.home}</span>
+            <motion.div
+              animate={{ rotate: [0, -10, 10, 0] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <FaHome className="text-xl text-blue-400" />
+            </motion.div>
+            <span className="font-medium text-sm lg:text-base">{t.home}</span>
           </Link>
         </motion.button>
 
@@ -636,7 +726,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           className="text-center"
         >
           <motion.h1
-            className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 bg-clip-text text-transparent"
+            className="text-2xl lg:text-4xl font-bold bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 bg-clip-text text-transparent"
             animate={{
               backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"],
             }}
@@ -645,12 +735,12 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           >
             Quiz Attack
           </motion.h1>
-          <div className="flex items-center justify-center space-x-2 md:space-x-3 mt-2">
-            <span className="text-xs md:text-sm text-white/70 font-medium">
+          <div className="flex items-center justify-center space-x-2 lg:space-x-3 mt-2">
+            <span className="text-xs lg:text-sm text-white/70 font-medium">
               {t.room}:
             </span>
-            <div className="flex items-center space-x-2 bg-white/10 px-2 py-1 md:px-3 md:py-1 rounded-lg">
-              <span className="text-xs md:text-sm font-mono font-bold">
+            <div className="flex items-center space-x-2 bg-white/10 px-2 py-1 lg:px-3 lg:py-1 rounded-lg">
+              <span className="text-xs lg:text-sm font-mono font-bold">
                 {maskedRoomCode}
               </span>
               <motion.button
@@ -669,9 +759,9 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       </motion.header>
 
       {/* Main Content */}
-      <main className="flex-1 px-4 md:px-6 pb-6 overflow-y-auto md:overflow-hidden flex flex-col">
+      <main className="flex-1 px-4 lg:px-6 pb-6 overflow-y-auto lg:overflow-hidden flex flex-col">
         {/* Mobile Toggle Players Button */}
-        <div className="block md:hidden mb-4">
+        <div className="block lg:hidden mb-4">
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
@@ -696,24 +786,24 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           </motion.button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 h-full max-w-8xl mx-auto w-full flex-1 min-h-0 md:overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 h-full max-w-8xl mx-auto w-full flex-1 min-h-0 lg:overflow-hidden">
           {/* Players List - Left */}
           <motion.section
             variants={slideInLeft}
             initial="hidden"
             animate="visible"
-            className={`bg-white/10 backdrop-blur-lg rounded-2xl p-4 md:p-6 flex flex-col h-full overflow-hidden border border-white/20 shadow-xl ${
-              showPlayersOnMobile ? "block" : "hidden md:block"
+            className={`bg-white/10 backdrop-blur-lg rounded-2xl p-4 lg:p-6 flex flex-col h-full overflow-y-auto border border-white/20 shadow-xl ${
+              showPlayersOnMobile ? "block" : "hidden lg:block"
             }`}
             aria-label="Players list"
           >
             <motion.div
-              className="flex items-center justify-between mb-4 md:mb-6"
+              className="flex items-center justify-between mb-4 lg:mb-6"
               initial={{ y: -20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.4 }}
             >
-              <div className="flex items-center space-x-2 md:space-x-3">
+              <div className="flex items-center space-x-2 lg:space-x-3">
                 <motion.div
                   animate={{
                     scale: [1, 1.1, 1],
@@ -721,25 +811,40 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
                   }}
                   transition={{ duration: 2, repeat: Infinity }}
                 >
-                  <FaUsers className="text-xl md:text-2xl text-blue-400" />
+                  <FaUsers className="text-xl lg:text-2xl text-blue-400" />
                 </motion.div>
-                <h2 className="text-lg md:text-xl font-bold">
+                <h2 className="text-lg lg:text-xl font-bold">
                   {t.players} ({playerCount}/{maxPlayersText})
                 </h2>
               </div>
-              <button
-                className="md:hidden text-white/70 hover:text-white"
-                onClick={togglePlayersOnMobile}
-                aria-label={t.players}
-              >
-                <FaChevronLeft />
-              </button>
+              <div className="flex items-center space-x-2">
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={handleRefreshPlayers}
+                  disabled={isLoadingPlayers}
+                  className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
+                  aria-label="Refresh players"
+                >
+                  <FaSync
+                    className={
+                      isLoadingPlayers ? "animate-spin text-blue-400" : ""
+                    }
+                  />
+                </motion.button>
+                <button
+                  className="lg:hidden text-white/70 hover:text-white"
+                  onClick={togglePlayersOnMobile}
+                  aria-label={t.players}
+                >
+                  <FaChevronLeft />
+                </button>
+              </div>
             </motion.div>
 
             {renderMaxPlayersControls()}
-
-  {/* Scrollable content */}
-
+                  
+            {/* Scrollable content */}
             <motion.div
               variants={staggerChildren}
               initial="hidden"
@@ -750,16 +855,42 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
                 scrollbarColor: "rgba(255, 255, 255, 0.3) transparent",
               }}
             >
-              <AnimatePresence mode="popLayout">
-                {players.map((player, index) => (
-                  <PlayerCard
-                    key={player.id}
-                    player={player}
-                    onKick={handleKickPlayer}
-                    index={index}
-                  />
-                ))}
-              </AnimatePresence>
+              {isLoadingPlayers ? (
+                <div className="flex items-center justify-center h-32">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    className="text-2xl text-white/50"
+                  >
+                    <FaSync />
+                  </motion.div>
+                </div>
+              ) : (
+                <>
+                  <AnimatePresence mode="popLayout">
+                    {players.map((player, index) => (
+                      <PlayerCard
+                        key={player.id}
+                        player={player}
+                        onKick={handleKickPlayer}
+                        index={index}
+                      />
+                    ))}
+                  </AnimatePresence>
+                  
+                  {/* Demo button to add players (for testing) */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleAddDemoPlayer}
+                      className="p-3 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg text-blue-300 text-sm font-medium mt-4 border border-blue-400/30"
+                    >
+                      + Add Demo Player
+                    </motion.button>
+                  )}
+                </>
+              )}
             </motion.div>
           </motion.section>
 
@@ -768,9 +899,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             variants={slideInRight}
             initial="hidden"
             animate="visible"
-            className={`lg:col-span-2 bg-white/10 backdrop-blur-lg rounded-2xl p-4 md:p-6 flex flex-col h-full overflow-hidden border border-white/20 shadow-xl ${
-              showPlayersOnMobile ? "hidden md:flex" : "flex"
-            }`}
+            className={`lg:col-span-2 bg-white/10 backdrop-blur-lg rounded-2xl p-4 lg:p-6 flex flex-col h-full overflow-hidden border border-white/20 shadow-xl `}
             aria-label="Game configuration"
           >
             <ShareSection
