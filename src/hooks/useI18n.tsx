@@ -1,8 +1,7 @@
 // hooks/useI18n.tsx
 "use client";
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
-import { translations } from "@/i18n";
-import { LanguageCode, TranslationData } from "@/i18n/translations";
+import { LanguageCode, TranslationData, translations } from "@/i18n/translations";
 
 interface I18nContextType {
   language: LanguageCode;
