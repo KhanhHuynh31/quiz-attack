@@ -247,7 +247,10 @@ export interface LobbyTranslations {
   hideAnswersDesc: string;
   powerCards: string;
   powerCardsDesc: string;
-  numberOfQuestion: string
+  numberOfQuestion: string;
+  loading: string;
+  needPlayers: string;
+  
 }
 
 export const lobbyTranslations: Record<string, LobbyTranslations> = {
@@ -277,7 +280,9 @@ export const lobbyTranslations: Record<string, LobbyTranslations> = {
     hideAnswersDesc: "Players won't see the correct answers during the game",
     powerCards: "Power Cards",
     powerCardsDesc: "Select which power cards are available during the game",
-    numberOfQuestion: "Number of Questions"
+    numberOfQuestion: "Number of Questions",
+    loading: "Loading...",
+    needPlayers: "Need at least 2 players to start the game",
   },
   vi: {
     home: "Trang Chủ",
@@ -305,6 +310,8 @@ export const lobbyTranslations: Record<string, LobbyTranslations> = {
     hideAnswersDesc: "Người chơi sẽ không thấy đáp án đúng trong suốt trò chơi",
     powerCards: "Thẻ Sức Mạnh",
     powerCardsDesc: "Chọn thẻ sức mạnh được phép sử dụng trong trò chơi",
-    numberOfQuestion: "Số lượng câu hỏi"
+    numberOfQuestion: "Số lượng câu hỏi",
+    loading: "Đang tải...",
+    needPlayers: "Cần ít nhất 2 người chơi để bắt đầu trò chơi",
   },
 };
