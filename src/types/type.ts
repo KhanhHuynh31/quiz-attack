@@ -1,7 +1,7 @@
 // types.ts
 export interface Player {
   id: number;
-  name: string;
+  nickname: string;
   avatar?: string;
   isHost?: boolean;
   isReady?: boolean;
@@ -57,7 +57,7 @@ export interface LocalStorageQuestion {
 }
 export interface GameConfig {
   gameSettings: GameSettings;
-  selectedGameMode: string;
+  selectedGameMode: GameMode | null;
   players: Player[];
   roomCode: string;
 }
@@ -66,7 +66,7 @@ export interface ExtendedGameConfig extends GameConfig {
 }
 
 export interface GameMode {
-  id: string;
+  id: number;
   mode: string;
   name: string;
   description: string;

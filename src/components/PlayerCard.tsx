@@ -1,4 +1,3 @@
-// PlayerCard.tsx
 "use client";
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -6,6 +5,7 @@ import { FaCrown, FaUserCheck, FaUserClock, FaUserTimes } from "react-icons/fa";
 import { useI18n } from "@/hooks/useI18n";
 import { lobbyTranslations } from "@/i18n/translations";
 import { Player } from "@/types/type";
+import Avatar, { genConfig, AvatarFullConfig } from "react-nice-avatar";
 
 interface PlayerCardProps {
   player: Player;
@@ -19,6 +19,44 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index }) => {
   const t =
     lobbyTranslations[language as keyof typeof lobbyTranslations] ||
     lobbyTranslations.en;
+
+  // Phân tích avatar data từ trường avatar duy nhất
+  const getAvatarContent = () => {
+    try {
+      // Nếu avatar là URL hình ảnh (bắt đầu với http/https)
+      if (player.avatar?.startsWith('http')) {
+        return (
+          <img
+            src={player.avatar}
+            alt="User avatar"
+            className="w-full h-full object-cover"
+          />
+        );
+      }
+      
+      // Nếu avatar là JSON string chứa cấu hình react-nice-avatar
+      if (player.avatar?.startsWith('{')) {
+        const config = JSON.parse(player.avatar) as AvatarFullConfig;
+        return <Avatar className="w-full h-full" {...config} />;
+      }
+      
+      // Nếu avatar là emoji hoặc string ngắn, tạo config từ đó
+      if (player.avatar) {
+        const config = genConfig(player.avatar);
+        return <Avatar className="w-full h-full" {...config} />;
+      }
+      
+      // Fallback: tạo avatar ngẫu nhiên
+      const config = genConfig();
+      return <Avatar className="w-full h-full" {...config} />;
+      
+    } catch (error) {
+      console.error('Error parsing avatar:', error);
+      // Fallback: tạo avatar ngẫu nhiên nếu có lỗi
+      const config = genConfig();
+      return <Avatar className="w-full h-full" {...config} />;
+    }
+  };
 
   return (
     <motion.div
@@ -84,9 +122,9 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index }) => {
               : { scale: 1, rotate: 0 }
           }
           transition={{ duration: 0.3 }}
-          className="text-3xl relative"
+          className="relative w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-gray-700"
         >
-          {player.avatar}
+          {getAvatarContent()}
           {player.isHost && (
             <motion.div
               initial={{ scale: 0 }}
@@ -108,7 +146,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index }) => {
             animate={isHovered ? { x: 5 } : { x: 0 }}
             className="font-bold text-lg"
           >
-            {player.name}
+            {player.nickname}
           </motion.p>
           <motion.div
             className="flex items-center space-x-1"

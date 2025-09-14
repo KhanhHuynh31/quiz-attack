@@ -5,6 +5,7 @@ export const LOCAL_STORAGE_KEYS = {
   NICKNAME: "quizAttack_nickname",
   AVATAR_CONFIG: "quizAttack_avatarConfig",
   CUSTOM_AVATAR_IMAGE: "quizAttack_customAvatarImage",
+  PLAYER_DATA: "quizAttack_playerData", // Thêm key mới
 } as const;
 
 // Local storage utilities

@@ -26,7 +26,13 @@ import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
 import { useI18n } from "@/hooks/useI18n";
 
 // Import types and translations
-import { GameConfig, GameSettings, Player, QuizPack } from "@/types/type";
+import {
+  GameConfig,
+  GameMode,
+  GameSettings,
+  Player,
+  QuizPack,
+} from "@/types/type";
 import { lobbyTranslations } from "@/i18n/translations";
 import GameSettingSelector from "@/components/Selector/GameSetingSelector";
 import { useRouter } from "next/navigation";
@@ -37,9 +43,8 @@ import PlayerCard from "@/components/PlayerCard";
 import { DEFAULT_QUIZ_PACKS } from "@/data/quizData";
 import { LanguageSelector } from "@/components/Selector/LanguageSelector";
 import Link from "next/link";
-import { loadFromLocalStorage, LOCAL_STORAGE_KEYS } from "@/hooks/useLocalStorage";
-
-// Import the default quiz packs
+import { supabase } from "@/lib/supabaseClient";
+import { GAME_MODES } from "@/data/modeData";
 
 // Types
 type TabType = "mode" | "settings" | "packs";
@@ -53,7 +58,7 @@ interface QuizAttackLobbyProps {
 const DEFAULT_PLAYERS: Player[] = [
   {
     id: 1,
-    name: "Host Player",
+    nickname: "Host Player",
     avatar: "👑",
     isHost: true,
     isReady: true,
@@ -141,41 +146,6 @@ const useRoomData = (initialRoomCode?: string) => {
   return { roomCode, shareLink };
 };
 
-// Function to load players from localStorage
-const loadPlayersFromStorage = (roomCode: string): Player[] => {
-  if (typeof window === "undefined") return DEFAULT_PLAYERS;
-
-  try {
-    const storedPlayers = localStorage.getItem(`quiz_players_${roomCode}`);
-    if (storedPlayers) {
-      return JSON.parse(storedPlayers);
-    }
-    
-    // If no players in storage, try to get from the default game config
-    const storedConfig = localStorage.getItem(`game_config_${roomCode}`);
-    if (storedConfig) {
-      const config: GameConfig = JSON.parse(storedConfig);
-      return config.players || DEFAULT_PLAYERS;
-    }
-    
-    return DEFAULT_PLAYERS;
-  } catch (error) {
-    console.error("Error loading players from localStorage:", error);
-    return DEFAULT_PLAYERS;
-  }
-};
-
-// Function to save players to localStorage
-const savePlayersToStorage = (roomCode: string, players: Player[]): void => {
-  if (typeof window === "undefined") return;
-
-  try {
-    localStorage.setItem(`quiz_players_${roomCode}`, JSON.stringify(players));
-  } catch (error) {
-    console.error("Error saving players to localStorage:", error);
-  }
-};
-
 // Main Component
 const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   initialRoomCode,
@@ -200,12 +170,14 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   const [isLoadingPlayers, setIsLoadingPlayers] = useState(true);
   const [gameSettings, setGameSettings] = useState<GameSettings>({
     ...DEFAULT_GAME_SETTINGS,
-    selectedQuizPack: DEFAULT_QUIZ_PACKS[0], // Set first quiz pack as default
+    selectedQuizPack: DEFAULT_QUIZ_PACKS[0],
   });
   const [showQRCode, setShowQRCode] = useState<boolean>(false);
   const [showRoomCode, setShowRoomCode] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<TabType>("mode");
-  const [selectedGameMode, setSelectedGameMode] = useState<string>("classic");
+  const [selectedGameMode, setSelectedGameMode] = useState<GameMode | null>(
+    GAME_MODES[0] || null
+  );
   const [isMobileDropdownOpen, setIsMobileDropdownOpen] = useState(false);
   const [isTabChanging, setIsTabChanging] = useState(false);
   const [showPlayersOnMobile, setShowPlayersOnMobile] = useState(false);
@@ -213,31 +185,105 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   // Router
   const router = useRouter();
 
-  // Load players from localStorage on component mount
+  // Load data from Supabase on component mount
   useEffect(() => {
-    const loadPlayers = () => {
+    const loadRoomData = async () => {
       setIsLoadingPlayers(true);
       try {
-        const storedPlayers = loadPlayersFromStorage(roomCode);
-        const hostPlayer = loadFromLocalStorage(LOCAL_STORAGE_KEYS.NICKNAME, "")
-        setPlayers(storedPlayers);
+        let { data: room, error } = await supabase
+          .from("room")
+          .select("*")
+          .eq("room_code", roomCode)
+          .single();
+
+        if (error && error.code !== "PGRST116") {
+          console.error("Failed to load room data:", error);
+          setPlayers(DEFAULT_PLAYERS);
+          setGameSettings(DEFAULT_GAME_SETTINGS);
+          setSelectedGameMode(GAME_MODES[0] || null);
+          return;
+        }
+
+        if (!room) {
+          // Create new room with defaults
+          const defaultPlayerList = DEFAULT_PLAYERS.map((p) =>
+            JSON.stringify(p)
+          );
+          const defaultSettingList = [JSON.stringify(DEFAULT_GAME_SETTINGS)];
+          const defaultGameMode = GAME_MODES[0]?.id || 1;
+          const defaultQuizPack = DEFAULT_QUIZ_PACKS[0].id;
+
+          const { data: newRoom, error: insertError } = await supabase
+            .from("room")
+            .insert({
+              room_code: roomCode,
+              player_list: defaultPlayerList,
+              setting_list: defaultSettingList,
+              game_mode: defaultGameMode,
+              quiz_pack: defaultQuizPack,
+            })
+            .select()
+            .single();
+
+          if (insertError) {
+            console.error("Failed to create room:", insertError);
+            setPlayers(DEFAULT_PLAYERS);
+            setGameSettings(DEFAULT_GAME_SETTINGS);
+            setSelectedGameMode(GAME_MODES[0] || null);
+            return;
+          }
+
+          room = newRoom;
+        }
+
+        // Load players
+        const loadedPlayers =
+          room.player_list?.map((p: string) => JSON.parse(p)) ||
+          DEFAULT_PLAYERS;
+        setPlayers(loadedPlayers);
+
+        // Load settings
+        const parsedSettings = room.setting_list?.[0]
+          ? JSON.parse(room.setting_list[0])
+          : DEFAULT_GAME_SETTINGS;
+
+        // Load quiz pack
+        const quizPackId = room.quiz_pack || DEFAULT_QUIZ_PACKS[0].id;
+        const selectedQuizPack =
+          DEFAULT_QUIZ_PACKS.find((pack: QuizPack) => pack.id === quizPackId) ||
+          DEFAULT_QUIZ_PACKS[0];
+        setGameSettings({ ...parsedSettings, selectedQuizPack });
+
+        // Load game mode
+        const gameModeId = room.game_mode;
+
+        const selectedMode = GAME_MODES.find(
+          (mode: GameMode) => mode.id === gameModeId
+        );
+
+        if (selectedMode) {
+          setSelectedGameMode(selectedMode);
+        } else {
+          // Fallback to first game mode if not found
+          console.warn(
+            `Game mode with id ${gameModeId} not found in GAME_MODES, using default`
+          );
+          setSelectedGameMode(GAME_MODES[0] || null);
+        }
       } catch (error) {
-        console.error("Failed to load players:", error);
-        setPlayers(initialPlayers || DEFAULT_PLAYERS);
+        console.error("Error loading room data from Supabase:", error);
+        setPlayers(DEFAULT_PLAYERS);
+        setGameSettings(DEFAULT_GAME_SETTINGS);
+        setSelectedGameMode(GAME_MODES[0] || null);
       } finally {
         setIsLoadingPlayers(false);
       }
     };
 
-    loadPlayers();
-  }, [roomCode, initialPlayers]);
-
-  // Save players to localStorage whenever players change
-  useEffect(() => {
-    if (!isLoadingPlayers) {
-      savePlayersToStorage(roomCode, players);
+    if (roomCode) {
+      loadRoomData();
     }
-  }, [players, roomCode, isLoadingPlayers]);
+  }, [roomCode]);
 
   // Effect to handle window resize and close dropdown on desktop
   useEffect(() => {
@@ -272,7 +318,30 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     setPlayers((prev) => prev.filter((player) => player.id !== playerId));
   }, []);
 
-  const handleStartGame = useCallback(() => {
+  const handleStartGame = useCallback(async () => {
+    // Save data to Supabase before starting
+    try {
+      const playerList = players.map((p) => JSON.stringify(p));
+      const settingsToStore = { ...gameSettings, selectedQuizPack: undefined };
+      const settingList = [JSON.stringify(settingsToStore)];
+      const gameModeId = selectedGameMode?.id || 0;
+      const quizPackId = gameSettings.selectedQuizPack?.id || 0;
+
+      const { error } = await supabase.from("room").upsert({
+        room_code: roomCode,
+        player_list: playerList,
+        setting_list: settingList,
+        game_mode: gameModeId,
+        quiz_pack: quizPackId,
+      });
+
+      if (error) {
+        console.error("Failed to save room data:", error);
+      }
+    } catch (error) {
+      console.error("Error saving to Supabase:", error);
+    }
+
     const gameConfig: GameConfig = {
       gameSettings,
       selectedGameMode,
@@ -280,10 +349,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       roomCode,
     };
 
-    // Save configuration using the game config module
     saveGameConfig(roomCode, gameConfig);
-
-    // Navigate to play page
     router.push(`/play/${roomCode}`);
   }, [gameSettings, selectedGameMode, players, roomCode, router]);
 
@@ -333,36 +399,45 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     setShowPlayersOnMobile((prev) => !prev);
   }, []);
 
-  // Refresh players list (simulate API call)
-  const handleRefreshPlayers = useCallback(() => {
+  // Refresh players list (fetch from Supabase again)
+  const handleRefreshPlayers = useCallback(async () => {
     setIsLoadingPlayers(true);
-    // Simulate API call with timeout
-    setTimeout(() => {
-      try {
-        const storedPlayers = loadPlayersFromStorage(roomCode);
-        setPlayers(storedPlayers);
-      } catch (error) {
+    try {
+      const { data: room, error } = await supabase
+        .from("room")
+        .select("player_list")
+        .eq("room_code", roomCode)
+        .single();
+
+      if (error) {
         console.error("Failed to refresh players:", error);
-      } finally {
-        setIsLoadingPlayers(false);
+        return;
       }
-    }, 800);
+
+      const loadedPlayers =
+        room.player_list?.map((p: string) => JSON.parse(p)) || DEFAULT_PLAYERS;
+      setPlayers(loadedPlayers);
+    } catch (error) {
+      console.error("Error refreshing players:", error);
+    } finally {
+      setIsLoadingPlayers(false);
+    }
   }, [roomCode]);
 
   // Add a new player (for testing/demo purposes)
   const handleAddDemoPlayer = useCallback(() => {
-    const newPlayerId = Math.max(...players.map(p => p.id), 0) + 1;
+    const newPlayerId = Math.max(...players.map((p) => p.id), 0) + 1;
     const newPlayer: Player = {
       id: newPlayerId,
-      name: `Player ${newPlayerId}`,
+      nickname: `Player ${newPlayerId}`,
       avatar: "😊",
       isHost: false,
       isReady: false,
       score: 0,
       cards: 0,
     };
-    
-    setPlayers(prev => [...prev, newPlayer]);
+
+    setPlayers((prev) => [...prev, newPlayer]);
   }, [players]);
 
   // Render helpers
@@ -620,7 +695,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       <div className="flex-1 overflow-hidden min-h-0">
         <AnimatePresence mode="wait">
           <motion.div
-            key={`tab-${activeTab}`} // Unique key for each tab
+            key={`tab-${activeTab}`}
             {...animationVariants.tabContent}
             className="h-full overflow-y-auto overflow-hidden space-y-6 p-3"
           >
@@ -682,7 +757,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
                   <span>{t.settings}</span>
                 </motion.h3>
 
-                {/* Settings content would go here */}
                 <GameSettingSelector
                   settings={gameSettings}
                   onSettingChange={handleSettingChange}
@@ -843,7 +917,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             </motion.div>
 
             {renderMaxPlayersControls()}
-                  
+
             {/* Scrollable content */}
             <motion.div
               variants={staggerChildren}
@@ -859,7 +933,11 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
                 <div className="flex items-center justify-center h-32">
                   <motion.div
                     animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    transition={{
+                      duration: 1,
+                      repeat: Infinity,
+                      ease: "linear",
+                    }}
                     className="text-2xl text-white/50"
                   >
                     <FaSync />
@@ -877,9 +955,9 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
                       />
                     ))}
                   </AnimatePresence>
-                  
+
                   {/* Demo button to add players (for testing) */}
-                  {process.env.NODE_ENV === 'development' && (
+                  {process.env.NODE_ENV === "development" && (
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}

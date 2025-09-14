@@ -14,7 +14,7 @@ import {
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import Avatar, { genConfig, AvatarFullConfig } from "react-nice-avatar";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 // Import components
 import { Header } from "@/components/home/Header";
@@ -25,8 +25,13 @@ import AvatarCustomModal from "@/components/home/AvatarCustomModal";
 // Import hooks and types
 import { useI18n } from "@/hooks/useI18n";
 import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
-import { QuizPack } from "@/types/type";
-import { loadFromLocalStorage, LOCAL_STORAGE_KEYS, saveToLocalStorage } from "@/hooks/useLocalStorage";
+import { GameMode, QuizPack } from "@/types/type";
+import {
+  loadFromLocalStorage,
+  LOCAL_STORAGE_KEYS,
+  saveToLocalStorage,
+} from "@/hooks/useLocalStorage";
+import { supabase } from "@/lib/supabaseClient";
 
 // Types
 type TabType = "gameMode" | "quizPack";
@@ -34,6 +39,28 @@ type TabType = "gameMode" | "quizPack";
 interface QuizAttackStartProps {
   initialNickname?: string;
   initialRoomCode?: string;
+}
+
+interface Player {
+  id: string;
+  nickname: string;
+  avatar: string;
+  isHost: boolean;
+}
+
+interface PlayerData {
+  player: Player;
+  avatarConfig: AvatarFullConfig;
+  customAvatarImage: string | null;
+}
+
+interface RoomData {
+  room_code: string;
+  player_list: string[];
+  setting_list: string[];
+  game_mode: number | null;
+  quiz_pack: number | null;
+  room_password: string | null;
 }
 
 // Constants
@@ -44,6 +71,14 @@ const COPY_SUCCESS_DURATION = 1500;
 const DESKTOP_BREAKPOINT = 1024;
 
 const DEFAULT_AVATAR_CONFIG = genConfig();
+
+// Game Mode Mapping
+const GAME_MODE_MAP: Record<string, number> = {
+  classic: 1,
+  blitz: 2,
+  survival: 3,
+  team: 4,
+};
 
 // Animation variants
 const animationVariants = {
@@ -98,17 +133,165 @@ const generateRandomRoomCode = (): string => {
   return result;
 };
 
-const isDesktop = (): boolean => {
-  return typeof window !== "undefined" && window.innerWidth >= DESKTOP_BREAKPOINT;
+const generateUniqueId = (): string => {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2);
 };
 
+const isDesktop = (): boolean => {
+  return (
+    typeof window !== "undefined" && window.innerWidth >= DESKTOP_BREAKPOINT
+  );
+};
+
+const createPlayerData = (
+  nickname: string,
+  avatarConfig: AvatarFullConfig,
+  customAvatarImage: string | null,
+  isHost: boolean
+): Player => {
+  return {
+    id: generateUniqueId(),
+    nickname,
+    avatar: customAvatarImage || JSON.stringify(avatarConfig),
+    isHost,
+  };
+};
+
+// Database operations
+class DatabaseService {
+  static async checkRoomExists(roomCode: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from("room")
+        .select("room_code")
+        .eq("room_code", roomCode)
+        .single();
+
+      if (error && error.code !== "PGRST116") {
+        console.error("Error checking room:", error);
+        throw error;
+      }
+
+      return !!data;
+    } catch (error) {
+      console.error("Database error checking room:", error);
+      return false;
+    }
+  }
+
+  static async createRoom(
+    roomCode: string,
+    player: Player,
+    selectedGameMode: GameMode | null,
+    selectedPack: QuizPack | null,
+    password: string | null
+  ): Promise<void> {
+    try {
+      // Check if room already exists
+      const roomExists = await this.checkRoomExists(roomCode);
+      if (roomExists) {
+        throw new Error("Room with this code already exists");
+      }
+
+      const roomData: RoomData = {
+        room_code: roomCode,
+        player_list: [JSON.stringify(player)],
+        setting_list: [], // Can be extended later for room settings
+        game_mode: selectedGameMode?.id || 1,
+        quiz_pack: selectedPack?.id || 1,
+        room_password: password,
+      };
+
+      const { error } = await supabase.from("room").insert([roomData]);
+
+      if (error) {
+        console.error("Error creating room:", error);
+        throw error;
+      }
+
+      console.log("Room created successfully:", roomCode);
+    } catch (error) {
+      console.error("Failed to create room:", error);
+      throw error;
+    }
+  }
+
+  static async joinRoom(roomCode: string, player: Player): Promise<void> {
+    try {
+      // First check if room exists
+      const { data: roomData, error: fetchError } = await supabase
+        .from("room")
+        .select("player_list")
+        .eq("room_code", roomCode)
+        .single();
+
+      if (fetchError || !roomData) {
+        throw new Error("Room not found");
+      }
+
+      // Add player to the existing player list
+      const currentPlayers = roomData.player_list || [];
+      const updatedPlayers = [...currentPlayers, JSON.stringify(player)];
+
+      const { error: updateError } = await supabase
+        .from("room")
+        .update({ player_list: updatedPlayers })
+        .eq("room_code", roomCode);
+
+      if (updateError) {
+        console.error("Error joining room:", updateError);
+        throw updateError;
+      }
+
+      console.log("Successfully joined room:", roomCode);
+    } catch (error) {
+      console.error("Failed to join room:", error);
+      throw error;
+    }
+  }
+
+  static async verifyRoomPassword(
+    roomCode: string,
+    password: string
+  ): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from("room")
+        .select("room_password")
+        .eq("room_code", roomCode)
+        .single();
+
+      if (error) {
+        console.error("Error verifying password:", error);
+        return false;
+      }
+
+      return data.room_password === password;
+    } catch (error) {
+      console.error("Failed to verify password:", error);
+      return false;
+    }
+  }
+}
 
 // Custom hooks
 const useRoomCode = (initialCode?: string) => {
   const [roomCode, setRoomCode] = useState<string>("");
 
-  const generateRoomCode = useCallback(() => {
-    const newCode = generateRandomRoomCode();
+  const generateRoomCode = useCallback(async (): Promise<string> => {
+    let newCode: string;
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    do {
+      newCode = generateRandomRoomCode();
+      attempts++;
+
+      if (attempts >= maxAttempts) {
+        break; // Fallback to prevent infinite loop
+      }
+    } while (await DatabaseService.checkRoomExists(newCode));
+
     setRoomCode(newCode);
     return newCode;
   }, []);
@@ -151,11 +334,9 @@ const useClipboard = () => {
 const useResponsiveLayout = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  // Handle overflow and responsive behavior
   useEffect(() => {
     const handleResize = () => {
       const isDesktopView = isDesktop();
-            // Control body overflow
       if (isDesktopView) {
         setIsMobileMenuOpen(false);
       }
@@ -163,7 +344,7 @@ const useResponsiveLayout = () => {
 
     handleResize();
     window.addEventListener("resize", handleResize);
-    
+
     return () => {
       window.removeEventListener("resize", handleResize);
       document.body.style.overflow = "unset";
@@ -171,7 +352,7 @@ const useResponsiveLayout = () => {
   }, []);
 
   const toggleMobileMenu = useCallback(() => {
-    setIsMobileMenuOpen(prev => !prev);
+    setIsMobileMenuOpen((prev) => !prev);
   }, []);
 
   return {
@@ -181,16 +362,21 @@ const useResponsiveLayout = () => {
 };
 
 const useAvatar = () => {
+  // Load player data from localStorage
+  const savedPlayerData = loadFromLocalStorage<PlayerData | null>(
+    LOCAL_STORAGE_KEYS.PLAYER_DATA,
+    null
+  );
+
   const [avatarConfig, setAvatarConfig] = useState<AvatarFullConfig>(
-    loadFromLocalStorage(LOCAL_STORAGE_KEYS.AVATAR_CONFIG, DEFAULT_AVATAR_CONFIG)
+    savedPlayerData?.avatarConfig || DEFAULT_AVATAR_CONFIG
   );
   const [customAvatarImage, setCustomAvatarImage] = useState<string | null>(
-    loadFromLocalStorage(LOCAL_STORAGE_KEYS.CUSTOM_AVATAR_IMAGE, null)
+    savedPlayerData?.customAvatarImage || null
   );
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState<boolean>(false);
   const [showAvatarHint, setShowAvatarHint] = useState<boolean>(true);
 
-  // Auto-hide avatar hint
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowAvatarHint(false);
@@ -199,15 +385,20 @@ const useAvatar = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Save avatar config to localStorage whenever it changes
+  // Save avatar config and custom image to player data
   useEffect(() => {
-    saveToLocalStorage(LOCAL_STORAGE_KEYS.AVATAR_CONFIG, avatarConfig);
-  }, [avatarConfig]);
-
-  // Save custom avatar image to localStorage whenever it changes
-  useEffect(() => {
-    saveToLocalStorage(LOCAL_STORAGE_KEYS.CUSTOM_AVATAR_IMAGE, customAvatarImage);
-  }, [customAvatarImage]);
+    const playerData: PlayerData = {
+      player: savedPlayerData?.player || {
+        id: "",
+        nickname: "",
+        avatar: "",
+        isHost: false,
+      },
+      avatarConfig,
+      customAvatarImage,
+    };
+    saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+  }, [avatarConfig, customAvatarImage, savedPlayerData]);
 
   const openAvatarModal = useCallback(() => {
     setIsAvatarModalOpen(true);
@@ -260,8 +451,8 @@ const TabNavigation: React.FC<{
 
 const TabContent: React.FC<{
   activeTab: TabType;
-  selectedGameMode: string;
-  onGameModeSelect: (mode: string) => void;
+  selectedGameMode: GameMode | null;
+  onGameModeSelect: (mode: GameMode | null) => void;
   selectedPack: QuizPack | null;
   onPackSelect: (pack: QuizPack | null) => void;
 }> = ({
@@ -340,13 +531,11 @@ const UserProfile: React.FC<{
           <Avatar className="w-full h-full" {...avatarConfig} />
         )}
 
-        {/* Camera icon overlay */}
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity duration-300 rounded-full">
           <FaEye className="text-white text-lg lg:text-xl" />
         </div>
       </motion.div>
 
-      {/* Avatar Hint */}
       <AnimatePresence>
         {showAvatarHint && (
           <motion.div
@@ -370,7 +559,6 @@ const UserProfile: React.FC<{
       </AnimatePresence>
     </motion.div>
 
-    {/* Nickname Input */}
     <div className="space-y-2">
       <motion.input
         value={nickname}
@@ -383,156 +571,6 @@ const UserProfile: React.FC<{
   </div>
 );
 
-const CreateRoomSection: React.FC<{
-  roomCode: string;
-  onRoomCodeChange: (code: string) => void;
-  copied: boolean;
-  onCopyCode: () => void;
-  isPasswordProtected: boolean;
-  onPasswordToggle: () => void;
-  roomPassword: string;
-  onPasswordChange: (password: string) => void;
-  t: any;
-}> = ({
-  roomCode,
-  onRoomCodeChange,
-  copied,
-  onCopyCode,
-  isPasswordProtected,
-  onPasswordToggle,
-  roomPassword,
-  onPasswordChange,
-  t,
-}) => (
-  <div className="mb-4 lg:mb-6 space-y-2">
-    <label className="block text-sm font-medium text-[#EAEAEA]">
-      {t.createRoom}
-    </label>
-    <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 mb-2">
-      <motion.div className="flex-1 relative" whileHover={{ scale: 1.01 }}>
-        <motion.input
-          value={roomCode}
-          onChange={(e) => onRoomCodeChange(e.target.value)}
-          placeholder={t.roomCodePlaceholder}
-          className="w-full rounded-xl lg:rounded-2xl border border-white/10 bg-white/10 px-3 py-2 lg:px-4 lg:py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all text-sm lg:text-base"
-          whileFocus={{ borderColor: "rgba(255, 107, 53, 0.5)" }}
-        />
-        <motion.button
-          onClick={onCopyCode}
-          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-[#EAEAEA] hover:text-white p-1 lg:p-2"
-          {...animationVariants.copyButton}
-          aria-label="Copy room code"
-        >
-          <AnimatePresence mode="wait">
-            {copied ? (
-              <motion.div
-                key="check"
-                initial={{ scale: 0, rotate: -180 }}
-                animate={{ scale: 1, rotate: 0 }}
-                exit={{ scale: 0 }}
-              >
-                <FaCheck className="text-xs lg:text-sm text-green-400" />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="copy"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-              >
-                <FaCopy className="text-xs lg:text-sm" />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.button>
-      </motion.div>
-      <motion.div {...animationVariants.createButton}>
-        <Link
-          href={`/lobby/${roomCode}`}
-          className="flex items-center justify-center gap-2 rounded-xl lg:rounded-2xl bg-[#FF6B35] px-4 py-2 lg:px-6 lg:py-3 font-semibold text-white shadow-lg shadow-[#FF6B35]/30 ring-1 ring-white/20 text-sm lg:text-base"
-        >
-          <motion.div whileHover={{ rotate: 90 }}>
-            <FaPlus className="text-xs lg:text-sm" />
-          </motion.div>
-          {t.create}
-        </Link>
-      </motion.div>
-    </div>
-
-    <motion.div className="flex items-center gap-3">
-      <motion.input
-        type="checkbox"
-        id="password-protection"
-        checked={isPasswordProtected}
-        onChange={onPasswordToggle}
-        className="w-4 h-4 rounded border-white/10 bg-white/10 text-[#FF6B35] focus:ring-[#FF6B35]"
-        whileHover={{ scale: 1.1 }}
-      />
-      <motion.label
-        htmlFor="password-protection"
-        className="text-sm text-[#EAEAEA] cursor-pointer"
-        whileHover={{ color: "#FFFFFF" }}
-      >
-        {t.setPassword}
-      </motion.label>
-    </motion.div>
-
-    <AnimatePresence>
-      {isPasswordProtected && (
-        <motion.div
-          className="mt-2"
-          {...animationVariants.passwordToggle}
-        >
-          <motion.input
-            type="password"
-            value={roomPassword}
-            onChange={(e) => onPasswordChange(e.target.value)}
-            placeholder={t.roomPassword}
-            className="w-full rounded-xl lg:rounded-2xl border border-white/10 bg-white/10 px-3 py-2 lg:px-4 lg:py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all text-sm lg:text-base"
-            whileFocus={{ scale: 1.02 }}
-          />
-        </motion.div>
-      )}
-    </AnimatePresence>
-  </div>
-);
-
-const JoinRoomSection: React.FC<{
-  joinCode: string;
-  onJoinCodeChange: (code: string) => void;
-  t: any;
-}> = ({ joinCode, onJoinCodeChange, t }) => (
-  <div className="space-y-2">
-    <label className="block text-sm font-medium text-[#EAEAEA]">
-      {t.joinRoom}
-    </label>
-    <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
-      <motion.input
-        value={joinCode}
-        onChange={(e) => onJoinCodeChange(e.target.value.toUpperCase())}
-        placeholder={t.enterRoomCode}
-        className="flex-1 rounded-xl lg:rounded-2xl border border-white/10 bg-white/10 px-3 py-2 lg:px-4 lg:py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all text-sm lg:text-base"
-        {...animationVariants.inputField}
-      />
-      <motion.button
-        className="inline-flex items-center justify-center gap-2 rounded-xl lg:rounded-2xl bg-[#FF6B35] px-4 py-2 lg:px-6 lg:py-3 font-semibold text-white shadow-lg shadow-[#FF6B35]/30 ring-1 ring-white/20 text-sm lg:text-base"
-        {...animationVariants.joinButton}
-      >
-        <motion.div
-          animate={{ x: [0, 2, 0] }}
-          transition={{
-            duration: 1.5,
-            repeat: Infinity,
-            repeatDelay: 2,
-          }}
-        >
-          <FaDoorOpen className="text-xs lg:text-sm" />
-        </motion.div>
-        {t.join}
-      </motion.button>
-    </div>
-  </div>
-);
-
 // Main Component
 const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
   initialNickname = "",
@@ -540,8 +578,10 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
 }) => {
   // Hooks
   const { t } = useI18n();
-  const { containerVariants, slideInLeft, slideInRight, scaleIn, fadeUp } = useEnhancedAnimations();
-  const { roomCode, updateRoomCode, generateRoomCode } = useRoomCode(initialRoomCode);
+  const { containerVariants, slideInLeft, slideInRight, scaleIn, fadeUp } =
+    useEnhancedAnimations();
+  const { roomCode, updateRoomCode, generateRoomCode } =
+    useRoomCode(initialRoomCode);
   const { copied, copyToClipboard } = useClipboard();
   const { isMobileMenuOpen, toggleMobileMenu } = useResponsiveLayout();
   const {
@@ -554,32 +594,62 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     openAvatarModal,
     closeAvatarModal,
   } = useAvatar();
+  const router = useRouter();
+
+  // Load player data from localStorage
+  const savedPlayerData = loadFromLocalStorage<PlayerData | null>(
+    LOCAL_STORAGE_KEYS.PLAYER_DATA,
+    null
+  );
 
   // Local state
   const [mounted, setMounted] = useState<boolean>(false);
   const [nickname, setNickname] = useState<string>(
-    initialNickname || loadFromLocalStorage(LOCAL_STORAGE_KEYS.NICKNAME, "")
+    initialNickname || savedPlayerData?.player.nickname || ""
   );
   const [joinCode, setJoinCode] = useState<string>("");
-  const [isPasswordProtected, setIsPasswordProtected] = useState<boolean>(false);
+  const [isPasswordProtected, setIsPasswordProtected] =
+    useState<boolean>(false);
   const [roomPassword, setRoomPassword] = useState<string>("");
   const [activeTab, setActiveTab] = useState<TabType>("gameMode");
-  const [selectedGameMode, setSelectedGameMode] = useState<string>("classic");
+  const [selectedGameMode, setSelectedGameMode] = useState<GameMode | null>(
+    null
+  );
   const [selectedPack, setSelectedPack] = useState<QuizPack | null>(null);
+  const [isCreating, setIsCreating] = useState<boolean>(false);
+  const [isJoining, setIsJoining] = useState<boolean>(false);
+  const [showPasswordModal, setShowPasswordModal] = useState<boolean>(false);
+  const [roomToJoin, setRoomToJoin] = useState<string>("");
+  const [joinPassword, setJoinPassword] = useState<string>("");
+  const [passwordError, setPasswordError] = useState<string>("");
 
-  // Save nickname to localStorage whenever it changes
+  // Save player data to localStorage whenever it changes
   useEffect(() => {
-    if (nickname.trim()) {
-      saveToLocalStorage(LOCAL_STORAGE_KEYS.NICKNAME, nickname);
-    }
-  }, [nickname]);
-
-  // Memoized values
-  const translations = useMemo(() => t, [t]);
+    const playerData: PlayerData = {
+      player: {
+        id: savedPlayerData?.player.id || "",
+        nickname,
+        avatar: customAvatarImage || JSON.stringify(avatarConfig),
+        isHost: savedPlayerData?.player.isHost || false,
+      },
+      avatarConfig,
+      customAvatarImage,
+    };
+    saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+  }, [nickname, avatarConfig, customAvatarImage, savedPlayerData]);
 
   // Initialize component
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  // Validation functions
+  const validateNickname = useCallback((nickname: string): boolean => {
+    return nickname.trim().length > 0;
+  }, []);
+
+  const validateRoomCode = useCallback((code: string): boolean => {
+    return code.trim().length === ROOM_CODE_LENGTH;
   }, []);
 
   // Event handlers
@@ -588,7 +658,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
   }, [copyToClipboard, roomCode]);
 
   const handlePasswordToggle = useCallback(() => {
-    setIsPasswordProtected(prev => !prev);
+    setIsPasswordProtected((prev) => !prev);
   }, []);
 
   const handleTabChange = useCallback((tab: TabType) => {
@@ -598,6 +668,150 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
   const handleNicknameChange = useCallback((newNickname: string) => {
     setNickname(newNickname);
   }, []);
+
+  const handleCreateRoom = useCallback(async () => {
+    if (!validateNickname(nickname)) {
+      alert("Please enter your nickname");
+      return;
+    }
+
+    if (!validateRoomCode(roomCode)) {
+      alert("Please enter a valid room code");
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const player = createPlayerData(
+        nickname,
+        avatarConfig,
+        customAvatarImage,
+        true // isHost = true when creating room
+      );
+      
+      // Update player data with host status
+      const playerData: PlayerData = {
+        player,
+        avatarConfig,
+        customAvatarImage,
+      };
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+      
+      await DatabaseService.createRoom(
+        roomCode,
+        player,
+        selectedGameMode,
+        selectedPack,
+        isPasswordProtected ? roomPassword : null
+      );
+      router.push(`/lobby/${roomCode}`);
+    } catch (error) {
+      console.error("Failed to create room:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to create room. Please try again.";
+      alert(errorMessage);
+    } finally {
+      setIsCreating(false);
+    }
+  }, [
+    nickname,
+    roomCode,
+    avatarConfig,
+    customAvatarImage,
+    selectedGameMode,
+    selectedPack,
+    isPasswordProtected,
+    roomPassword,
+    router,
+    validateNickname,
+    validateRoomCode,
+  ]);
+
+  const proceedWithJoin = async (roomCode: string) => {
+    setIsJoining(true);
+    try {
+      const player = createPlayerData(
+        nickname,
+        avatarConfig,
+        customAvatarImage,
+        false // isHost = false when joining room
+      );
+      
+      // Update player data with guest status
+      const playerData: PlayerData = {
+        player,
+        avatarConfig,
+        customAvatarImage,
+      };
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+      
+      await DatabaseService.joinRoom(roomCode, player);
+      router.push(`/lobby/${roomCode}`);
+    } catch (error) {
+      console.error("Failed to join room:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to join room. Please check the room code and try again.";
+      alert(errorMessage);
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  const handleJoinRoom = useCallback(async () => {
+    if (!validateNickname(nickname)) {
+      alert("Please enter your nickname");
+      return;
+    }
+
+    if (!validateRoomCode(joinCode)) {
+      alert("Please enter a valid room code");
+      return;
+    }
+
+    // Check if room requires password
+    try {
+      const { data: roomData } = await supabase
+        .from("room")
+        .select("room_password")
+        .eq("room_code", joinCode)
+        .single();
+
+      if (roomData?.room_password) {
+        // Room has password, show password modal
+        setRoomToJoin(joinCode);
+        setShowPasswordModal(true);
+        return;
+      }
+
+      // No password required, proceed to join
+      await proceedWithJoin(joinCode);
+    } catch (error) {
+      console.error("Error checking room password:", error);
+      alert("Failed to check room. Please try again.");
+    }
+  }, [nickname, joinCode, validateNickname, validateRoomCode]);
+
+  const handlePasswordSubmit = async () => {
+    try {
+      const isValid = await DatabaseService.verifyRoomPassword(
+        roomToJoin,
+        joinPassword
+      );
+      if (isValid) {
+        setShowPasswordModal(false);
+        setPasswordError("");
+        await proceedWithJoin(roomToJoin);
+      } else {
+        setPasswordError("Incorrect password");
+      }
+    } catch (error) {
+      setPasswordError("Failed to verify password");
+    }
+  };
 
   // Loading state
   if (!mounted) {
@@ -610,7 +824,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     <div className="relative min-h-screen w-full font-sans flex flex-col overflow-x-hidden">
       <Header />
 
-      {/* Avatar Selection Modal */}
       <AvatarCustomModal
         isOpen={isAvatarModalOpen}
         onClose={closeAvatarModal}
@@ -620,7 +833,56 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         setCustomAvatarImage={setCustomAvatarImage}
       />
 
-      {/* Main Content */}
+      {/* Password Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-xl max-w-md w-full"
+          >
+            <h3 className="text-white text-lg font-semibold mb-4">
+              Room Password Required
+            </h3>
+            <p className="text-white/80 mb-4">
+              This room is password protected. Please enter the password to
+              join.
+            </p>
+
+            <input
+              type="password"
+              value={joinPassword}
+              onChange={(e) => setJoinPassword(e.target.value)}
+              placeholder="Enter room password"
+              className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all mb-4"
+            />
+
+            {passwordError && (
+              <p className="text-red-400 mb-4">{passwordError}</p>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPasswordError("");
+                  setJoinPassword("");
+                }}
+                className="flex-1 py-3 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePasswordSubmit}
+                className="flex-1 py-3 rounded-xl bg-[#FF6B35] text-white hover:bg-[#FF7A47] transition-colors"
+              >
+                Join Room
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       <motion.main
         variants={containerVariants}
         initial="hidden"
@@ -663,7 +925,10 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
                 className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 border border-white/20 shadow-xl"
                 {...animationVariants.mobileMenuContent}
               >
-                <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
+                <TabNavigation
+                  activeTab={activeTab}
+                  onTabChange={handleTabChange}
+                />
                 <TabContent
                   activeTab={activeTab}
                   selectedGameMode={selectedGameMode}
@@ -686,7 +951,10 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
               className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 border border-white/20 shadow-xl"
               whileHover={{ borderColor: "rgba(255, 255, 255, 0.3)" }}
             >
-              <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
+              <TabNavigation
+                activeTab={activeTab}
+                onTabChange={handleTabChange}
+              />
               <TabContent
                 activeTab={activeTab}
                 selectedGameMode={selectedGameMode}
@@ -713,33 +981,138 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
                 customAvatarImage={customAvatarImage}
                 showAvatarHint={showAvatarHint}
                 onAvatarClick={openAvatarModal}
-                t={translations}
+                t={t}
               />
             </motion.div>
 
             {/* Create Room */}
-            <motion.div variants={fadeUp}>
-              <CreateRoomSection
-                roomCode={roomCode}
-                onRoomCodeChange={updateRoomCode}
-                copied={copied}
-                onCopyCode={handleCopyCode}
-                isPasswordProtected={isPasswordProtected}
-                onPasswordToggle={handlePasswordToggle}
-                roomPassword={roomPassword}
-                onPasswordChange={setRoomPassword}
-                t={translations}
-              />
-            </motion.div>
+            <div className="mb-4 lg:mb-6 space-y-2">
+              <label className="block text-sm font-medium text-[#EAEAEA]">
+                {t.createRoom}
+              </label>
+              <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 mb-2">
+                <motion.div
+                  className="flex-1 relative"
+                  whileHover={{ scale: 1.01 }}
+                >
+                  <motion.input
+                    value={roomCode}
+                    onChange={(e) => updateRoomCode(e.target.value)}
+                    placeholder={t.roomCodePlaceholder}
+                    className="w-full rounded-xl lg:rounded-2xl border border-white/10 bg-white/10 px-3 py-2 lg:px-4 lg:py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all text-sm lg:text-base"
+                    whileFocus={{ borderColor: "rgba(255, 107, 53, 0.5)" }}
+                  />
+                  <motion.button
+                    onClick={handleCopyCode}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-[#EAEAEA] hover:text-white p-1 lg:p-2"
+                    {...animationVariants.copyButton}
+                    aria-label="Copy room code"
+                  >
+                    <AnimatePresence mode="wait">
+                      {copied ? (
+                        <motion.div
+                          key="check"
+                          initial={{ scale: 0, rotate: -180 }}
+                          animate={{ scale: 1, rotate: 0 }}
+                          exit={{ scale: 0 }}
+                        >
+                          <FaCheck className="text-xs lg:text-sm text-green-400" />
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="copy"
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                        >
+                          <FaCopy className="text-xs lg:text-sm" />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.button>
+                </motion.div>
+                <motion.button
+                  onClick={handleCreateRoom}
+                  disabled={isCreating}
+                  className="flex items-center justify-center gap-2 rounded-xl lg:rounded-2xl bg-[#FF6B35] px-4 py-2 lg:px-6 lg:py-3 font-semibold text-white shadow-lg shadow-[#FF6B35]/30 ring-1 ring-white/20 text-sm lg:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                  {...animationVariants.createButton}
+                >
+                  <motion.div whileHover={{ rotate: 90 }}>
+                    <FaPlus className="text-xs lg:text-sm" />
+                  </motion.div>
+                  {isCreating ? "Creating..." : t.create}
+                </motion.button>
+              </div>
+
+              <motion.div className="flex items-center gap-3">
+                <motion.input
+                  type="checkbox"
+                  id="password-protection"
+                  checked={isPasswordProtected}
+                  onChange={handlePasswordToggle}
+                  className="w-4 h-4 rounded border-white/10 bg-white/10 text-[#FF6B35] focus:ring-[#FF6B35]"
+                  whileHover={{ scale: 1.1 }}
+                />
+                <motion.label
+                  htmlFor="password-protection"
+                  className="text-sm text-[#EAEAEA] cursor-pointer"
+                  whileHover={{ color: "#FFFFFF" }}
+                >
+                  {t.setPassword}
+                </motion.label>
+              </motion.div>
+
+              <AnimatePresence>
+                {isPasswordProtected && (
+                  <motion.div
+                    className="mt-2"
+                    {...animationVariants.passwordToggle}
+                  >
+                    <motion.input
+                      type="password"
+                      value={roomPassword}
+                      onChange={(e) => setRoomPassword(e.target.value)}
+                      placeholder={t.roomPassword}
+                      className="w-full rounded-xl lg:rounded-2xl border border-white/10 bg-white/10 px-3 py-2 lg:px-4 lg:py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all text-sm lg:text-base"
+                      whileFocus={{ scale: 1.02 }}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* Join Room */}
-            <motion.div variants={fadeUp}>
-              <JoinRoomSection
-                joinCode={joinCode}
-                onJoinCodeChange={setJoinCode}
-                t={translations}
-              />
-            </motion.div>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-[#EAEAEA]">
+                {t.joinRoom}
+              </label>
+              <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+                <motion.input
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                  placeholder={t.enterRoomCode}
+                  className="flex-1 rounded-xl lg:rounded-2xl border border-white/10 bg-white/10 px-3 py-2 lg:px-4 lg:py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all text-sm lg:text-base"
+                  {...animationVariants.inputField}
+                />
+                <motion.button
+                  onClick={handleJoinRoom}
+                  disabled={isJoining}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl lg:rounded-2xl bg-[#FF6B35] px-4 py-2 lg:px-6 lg:py-3 font-semibold text-white shadow-lg shadow-[#FF6B35]/30 ring-1 ring-white/20 text-sm lg:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                  {...animationVariants.joinButton}
+                >
+                  <motion.div
+                    animate={{ x: [0, 2, 0] }}
+                    transition={{
+                      duration: 1.5,
+                      repeat: Infinity,
+                      repeatDelay: 2,
+                    }}
+                  >
+                    <FaDoorOpen className="text-xs lg:text-sm" />
+                  </motion.div>
+                  {isJoining ? "Joining..." : t.join}
+                </motion.button>
+              </div>
+            </div>
           </motion.div>
         </motion.section>
       </motion.main>

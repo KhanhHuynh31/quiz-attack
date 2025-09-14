@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, JSX } from "react";
+import React, { useState, useEffect, JSX } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaQuestionCircle, FaCheck } from "react-icons/fa";
 import { GiCardPlay, GiDiceTwentyFacesTwenty } from "react-icons/gi";
@@ -17,7 +17,7 @@ interface GameModeItemProps {
   mode: GameMode;
   style: GameModeStyle;
   isSelected: boolean;
-  onSelect: (modeKey: string) => void;
+  onSelect: (mode: GameMode) => void;
   t: any;
   index: number;
 }
@@ -46,7 +46,7 @@ const GameModeItem: React.FC<GameModeItemProps> = ({
       whileTap={{ scale: 0.98 }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
-      onClick={() => onSelect(mode.mode)}
+      onClick={() => onSelect(mode)}
       className={`relative flex items-center space-x-4 p-4 rounded-xl cursor-pointer transition-all border overflow-hidden ${
         isSelected
           ? `bg-gradient-to-r ${style.gradient} border-orange-500/50 shadow-xl`
@@ -113,8 +113,8 @@ const GameModeItem: React.FC<GameModeItemProps> = ({
 
 // Main Game Mode Selector Component
 interface GameModeSelectorProps {
-  selectedMode: string;
-  onModeSelect: (mode: string) => void;
+  selectedMode: GameMode | null;
+  onModeSelect: (mode: GameMode) => void;
   title?: string;
 }
 
@@ -141,20 +141,27 @@ export const GameModeSelector: React.FC<GameModeSelectorProps> = ({
     },
   };
 
+  // Auto-select first mode if none is selected
+  useEffect(() => {
+    if (!selectedMode && GAME_MODES.length > 0) {
+      onModeSelect(GAME_MODES[0]);
+    }
+  }, [selectedMode, onModeSelect]);
+
   return (
-      <div className="space-y-4 p-4">
-        {GAME_MODES.map((mode, index) => (
-          <GameModeItem
-            key={mode.id}
-            mode={mode}
-            style={MODE_STYLES[mode.mode]}
-            isSelected={selectedMode === mode.mode}
-            onSelect={onModeSelect}
-            t={t}
-            index={index}
-          />
-        ))}
-      </div>
+    <div className="space-y-4 p-4">
+      {GAME_MODES.map((mode, index) => (
+        <GameModeItem
+          key={mode.id}
+          mode={mode}
+          style={MODE_STYLES[mode.mode]}
+          isSelected={selectedMode?.mode === mode.mode}
+          onSelect={onModeSelect}
+          t={t}
+          index={index}
+        />
+      ))}
+    </div>
   );
 };
 
