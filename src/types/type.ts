@@ -1,4 +1,14 @@
+import { AvatarFullConfig } from "react-nice-avatar";
+
 // types.ts
+export interface QuizQuestion {
+  id: number;
+  question: string;
+  options: string[];
+  correctAnswer: number;
+  explanation?: string;
+  imageUrl?: string;
+}
 export interface Player {
   id: number;
   nickname: string;
@@ -10,15 +20,18 @@ export interface Player {
   hasAnswered?: boolean;
   selectedAnswer?: number;
 }
-export interface QuizQuestion {
-  id: number;
-  question: string;
-  options: string[];
-  correctAnswer: number;
-  explanation?: string;
-  imageUrl?: string;
+export interface PlayerData {
+  player: Player;
+  avatarConfig: AvatarFullConfig;
+  customAvatarImage: string | null;
 }
+// Types
+export type TabType = "mode" | "settings" | "packs";
 
+export interface QuizAttackLobbyProps {
+  initialRoomCode?: string;
+  initialPlayers?: Player[];
+}
 export interface ActiveEffect {
   id: string;
   type: "time" | "css" | "score" | "answer";

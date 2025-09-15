@@ -72,14 +72,6 @@ const DESKTOP_BREAKPOINT = 1024;
 
 const DEFAULT_AVATAR_CONFIG = genConfig();
 
-// Game Mode Mapping
-const GAME_MODE_MAP: Record<string, number> = {
-  classic: 1,
-  blitz: 2,
-  survival: 3,
-  team: 4,
-};
-
 // Animation variants
 const animationVariants = {
   mobileToggle: {

@@ -9,8 +9,9 @@ import Avatar, { genConfig, AvatarFullConfig } from "react-nice-avatar";
 
 interface PlayerCardProps {
   player: Player;
-  onKick: (id: number) => void;
+  onKick?: (id: number) => void;
   index: number;
+  showKickButton: boolean;  
 }
 
 const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index }) => {
@@ -210,7 +211,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index }) => {
                 whileTap={{ scale: 0.8 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onKick(player.id);
+                  onKick?.(player.id);
                 }}
                 className="text-orange-400 hover:text-orange-300 bg-orange-400/20 p-2 rounded-lg border border-orange-400/30 transition-colors"
                 title={t.kickPlayer}
