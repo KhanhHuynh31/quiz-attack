@@ -11,7 +11,7 @@ interface PlayerCardProps {
   player: Player;
   onKick?: (id: number) => void;
   index: number;
-  showKickButton: boolean;  
+  showKickButton: boolean;
 }
 
 const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index }) => {
@@ -25,7 +25,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index }) => {
   const getAvatarContent = () => {
     try {
       // Nếu avatar là URL hình ảnh (bắt đầu với http/https)
-      if (player.avatar?.startsWith('http')) {
+      if (player.avatar?.startsWith("http")) {
         return (
           <img
             src={player.avatar}
@@ -34,25 +34,24 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index }) => {
           />
         );
       }
-      
+
       // Nếu avatar là JSON string chứa cấu hình react-nice-avatar
-      if (player.avatar?.startsWith('{')) {
+      if (player.avatar?.startsWith("{")) {
         const config = JSON.parse(player.avatar) as AvatarFullConfig;
         return <Avatar className="w-full h-full" {...config} />;
       }
-      
+
       // Nếu avatar là emoji hoặc string ngắn, tạo config từ đó
       if (player.avatar) {
         const config = genConfig(player.avatar);
         return <Avatar className="w-full h-full" {...config} />;
       }
-      
+
       // Fallback: tạo avatar ngẫu nhiên
       const config = genConfig();
       return <Avatar className="w-full h-full" {...config} />;
-      
     } catch (error) {
-      console.error('Error parsing avatar:', error);
+      console.error("Error parsing avatar:", error);
       // Fallback: tạo avatar ngẫu nhiên nếu có lỗi
       const config = genConfig();
       return <Avatar className="w-full h-full" {...config} />;
@@ -77,11 +76,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index }) => {
       }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
-      className={`flex m-1 items-center justify-between p-4 rounded-xl cursor-pointer overflow-hidden transition-all duration-300 ${
-        player.isReady
-          ? "bg-gradient-to-r from-green-500/20 to-green-600/20 border-green-500/40"
-          : "bg-gradient-to-r from-red-500/20 to-red-600/20 border-red-500/40"
-      } border shadow-lg hover:shadow-xl`}
+      className={`flex m-1 items-center justify-between p-4 rounded-xl cursor-pointer overflow-hidden transition-all duration-300 bg-gradient-to-r from-green-500/20 to-green-600/20 border-green-500/40 border shadow-lg hover:shadow-xl`}
     >
       {/* Animated background effect */}
       <motion.div
@@ -154,26 +149,11 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index }) => {
             animate={isHovered ? { x: 5 } : { x: 0 }}
             transition={{ delay: 0.1 }}
           >
-            {player.isHost ? (
+            {player.isHost && (
               <>
-                <FaCrown className="text-yellow-400 text-xs" />
+                <FaCrown className="text-yellow-400 text-xs z-2000" />
                 <span className="text-xs text-yellow-400 font-medium">
                   {t.host}
-                </span>
-              </>
-            ) : (
-              <>
-                {player.isReady ? (
-                  <FaUserCheck className="text-green-400 text-xs" />
-                ) : (
-                  <FaUserClock className="text-red-400 text-xs" />
-                )}
-                <span
-                  className={`text-xs font-medium ${
-                    player.isReady ? "text-green-400" : "text-red-400"
-                  }`}
-                >
-                  {player.isReady ? t.ready : t.notReady}
                 </span>
               </>
             )}

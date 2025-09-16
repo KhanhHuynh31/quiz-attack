@@ -7,7 +7,7 @@ export const LOCAL_STORAGE_KEYS = {
   NICKNAME: "quizAttack_nickname",
   AVATAR_CONFIG: "quizAttack_avatarConfig",
   CUSTOM_AVATAR_IMAGE: "quizAttack_customAvatarImage",
-  PLAYER_DATA: "quizAttack_playerData", // Thêm key mới
+  PLAYER_DATA: "quizAttack_playerData",
 } as const;
 
 // Local storage utilities
@@ -66,12 +66,4 @@ export function clearPlayerData(): void {
   if (typeof window === "undefined") return;
 
   localStorage.removeItem(STORAGE_KEY);
-}export const removePlayerData = (): void => {
-  if (typeof window === 'undefined') return;
-  
-  try {
-    localStorage.removeItem('quizAttackPlayerData');
-  } catch (error) {
-    console.error('Error removing player data from localStorage:', error);
-  }
-};
+}

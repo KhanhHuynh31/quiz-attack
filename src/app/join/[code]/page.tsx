@@ -1,16 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { FaExclamationTriangle, FaSpinner, FaUser } from "react-icons/fa";
-import { motion } from "framer-motion";
-import Avatar, { genConfig } from "react-nice-avatar";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
+import {
+  FaDoorOpen,
+  FaChevronRight,
+  FaEye,
+  FaSpinner,
+  FaExclamationTriangle,
+} from "react-icons/fa";
+import { motion, AnimatePresence } from "framer-motion";
+import Avatar, { genConfig, AvatarFullConfig } from "react-nice-avatar";
+import { useRouter, useParams } from "next/navigation";
 
 // Import components
+import { Header } from "@/components/home/Header";
 import AvatarCustomModal from "@/components/home/AvatarCustomModal";
 
 // Import hooks and types
 import { useI18n } from "@/hooks/useI18n";
+import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
 import {
   loadFromLocalStorage,
   LOCAL_STORAGE_KEYS,
@@ -20,9 +28,25 @@ import { supabase } from "@/lib/supabaseClient";
 
 // Types
 interface Player {
+  id: string;
   nickname: string;
   avatar: string;
   isHost: boolean;
+}
+
+interface PlayerData {
+  player: Player;
+  avatarConfig: AvatarFullConfig;
+  customAvatarImage: string | null;
+  roomSettings?: RoomSettings;
+}
+
+interface RoomSettings {
+  roomCode: string;
+  password: string | null;
+  gameModeId: number | null;
+  quizPackId: number | null;
+  createdAt: number;
 }
 
 interface RoomData {
@@ -35,80 +59,68 @@ interface RoomData {
 }
 
 // Constants
+const AVATAR_HINT_DURATION = 5000;
 const DEFAULT_AVATAR_CONFIG = genConfig();
+const ROOM_CHECK_INTERVAL = 30000; // Check room status every 30 seconds
+const ROOM_SETTINGS_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+
+// Animation variants
+const animationVariants = {
+  avatarContainer: {
+    whileHover: { scale: 1.1 },
+  },
+  inputField: {
+    whileFocus: { scale: 1.02 },
+    whileHover: { scale: 1.01 },
+  },
+  joinButton: {
+    whileHover: { scale: 1.05, backgroundColor: "#FF7A47" },
+    whileTap: { scale: 0.95 },
+  },
+} as const;
+
+// Utility functions
+const generateUniqueId = (): string => {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+};
+
+const createPlayerData = (
+  nickname: string,
+  avatarConfig: AvatarFullConfig,
+  customAvatarImage: string | null,
+  isHost: boolean
+): Player => {
+  return {
+    id: generateUniqueId(),
+    nickname,
+    avatar: customAvatarImage || JSON.stringify(avatarConfig),
+    isHost,
+  };
+};
 
 // Database operations
 class DatabaseService {
-  static async checkRoomExists(roomCode: string): Promise<boolean> {
-    try {
-      const { data, error } = await supabase
-        .from("room")
-        .select("room_code")
-        .eq("room_code", roomCode)
-        .single();
-
-      if (error && error.code !== "PGRST116") {
-        console.error("Error checking room:", error);
-        throw error;
-      }
-
-      return !!data;
-    } catch (error) {
-      console.error("Database error checking room:", error);
-      return false;
-    }
-  }
-
-  static async getRoom(roomCode: string): Promise<RoomData | null> {
+  static async getRoomData(roomCode: string): Promise<RoomData | null> {
     try {
       const { data, error } = await supabase
         .from("room")
         .select("*")
-        .eq("room_code", roomCode)
+        .eq("room_code", roomCode.toUpperCase())
         .single();
 
       if (error) {
-        console.error("Error fetching room:", error);
-        return null;
+        if (error.code === 'PGRST116') {
+          // No rows found - room doesn't exist
+          console.log('Room does not exist:', roomCode);
+          return null;
+        }
+        console.error("Error fetching room data:", error);
+        throw error;
       }
 
       return data;
     } catch (error) {
-      console.error("Database error fetching room:", error);
-      return null;
-    }
-  }
-
-  static async joinRoom(roomCode: string, player: Player): Promise<void> {
-    try {
-      // First check if room exists
-      const { data: roomData, error: fetchError } = await supabase
-        .from("room")
-        .select("player_list")
-        .eq("room_code", roomCode)
-        .single();
-
-      if (fetchError || !roomData) {
-        throw new Error("Room not found");
-      }
-
-      // Add player to the existing player list
-      const currentPlayers = roomData.player_list || [];
-      const updatedPlayers = [...currentPlayers, JSON.stringify(player)];
-
-      const { error: updateError } = await supabase
-        .from("room")
-        .update({ player_list: updatedPlayers })
-        .eq("room_code", roomCode);
-
-      if (updateError) {
-        console.error("Error joining room:", updateError);
-        throw updateError;
-      }
-
-      console.log("Successfully joined room:", roomCode);
-    } catch (error) {
-      console.error("Failed to join room:", error);
+      console.error("Failed to fetch room data:", error);
       throw error;
     }
   }
@@ -121,7 +133,7 @@ class DatabaseService {
       const { data, error } = await supabase
         .from("room")
         .select("room_password")
-        .eq("room_code", roomCode)
+        .eq("room_code", roomCode.toUpperCase())
         .single();
 
       if (error) {
@@ -136,402 +148,637 @@ class DatabaseService {
     }
   }
 
-  static async checkNicknameInRoom(
-    roomCode: string,
-    nickname: string
-  ): Promise<boolean> {
+  static async joinRoom(roomCode: string, player: Player): Promise<void> {
     try {
-      const { data, error } = await supabase
+      // First check if room exists
+      const { data: roomData, error: fetchError } = await supabase
         .from("room")
         .select("player_list")
-        .eq("room_code", roomCode)
+        .eq("room_code", roomCode.toUpperCase())
         .single();
 
-      if (error || !data) {
-        return false;
+      if (fetchError || !roomData) {
+        throw new Error("Room not found");
       }
 
-      const players: Player[] = data.player_list
-        ? data.player_list.map((player: string) => JSON.parse(player))
-        : [];
+      // Parse existing players
+      let currentPlayers: Player[] = [];
+      try {
+        currentPlayers = roomData.player_list 
+          ? roomData.player_list.map((p: string) => JSON.parse(p) as Player)
+          : [];
+      } catch (parseError) {
+        console.error("Error parsing player list:", parseError);
+        currentPlayers = [];
+      }
 
-      return players.some(
-        (player) => player.nickname.toLowerCase() === nickname.toLowerCase()
-      );
+      // Check if player already exists in the room
+      const playerExists = currentPlayers.some(p => p.id === player.id);
+      if (playerExists) {
+        console.log("Player already in room, proceeding...");
+        return;
+      }
+
+      // Add player to the existing player list
+      const updatedPlayers = [...currentPlayers, player];
+
+      const { error: updateError } = await supabase
+        .from("room")
+        .update({ 
+          player_list: updatedPlayers.map(p => JSON.stringify(p))
+        })
+        .eq("room_code", roomCode.toUpperCase());
+
+      if (updateError) {
+        console.error("Error joining room:", updateError);
+        throw updateError;
+      }
+
+      console.log("Successfully joined room:", roomCode);
     } catch (error) {
-      console.error("Error checking nickname:", error);
-      return false;
+      console.error("Failed to join room:", error);
+      throw error;
     }
   }
 }
 
+// Room settings utilities
+const loadRoomSettings = (): RoomSettings | null => {
+  try {
+    const playerData = loadFromLocalStorage<PlayerData | null>(
+      LOCAL_STORAGE_KEYS.PLAYER_DATA,
+      null
+    );
+    
+    if (!playerData || !playerData.roomSettings) {
+      return null;
+    }
+    
+    const roomSettings = playerData.roomSettings;
+    
+    // Check if settings are expired (24 hours)
+    const now = Date.now();
+    if (roomSettings.createdAt + ROOM_SETTINGS_EXPIRY < now) {
+      // Remove expired settings
+      const updatedPlayerData = { ...playerData, roomSettings: undefined };
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, updatedPlayerData);
+      return null;
+    }
+    
+    return roomSettings;
+  } catch (error) {
+    console.error("Failed to load room settings:", error);
+    return null;
+  }
+};
+
+const saveRoomSettings = (settings: RoomSettings): void => {
+  try {
+    const playerData = loadFromLocalStorage<PlayerData>(
+      LOCAL_STORAGE_KEYS.PLAYER_DATA,
+      {
+        player: {
+          id: "",
+          nickname: "",
+          avatar: "",
+          isHost: false,
+        },
+        avatarConfig: DEFAULT_AVATAR_CONFIG,
+        customAvatarImage: null,
+      }
+    );
+    
+    playerData.roomSettings = settings;
+    saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+  } catch (error) {
+    console.error("Failed to save room settings:", error);
+  }
+};
+
+// Custom hooks
+const useAvatar = () => {
+  // Load player data from localStorage
+  const savedPlayerData = loadFromLocalStorage<PlayerData | null>(
+    LOCAL_STORAGE_KEYS.PLAYER_DATA,
+    null
+  );
+
+  const [avatarConfig, setAvatarConfig] = useState<AvatarFullConfig>(
+    savedPlayerData?.avatarConfig || DEFAULT_AVATAR_CONFIG
+  );
+  const [customAvatarImage, setCustomAvatarImage] = useState<string | null>(
+    savedPlayerData?.customAvatarImage || null
+  );
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState<boolean>(false);
+  const [showAvatarHint, setShowAvatarHint] = useState<boolean>(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowAvatarHint(false);
+    }, AVATAR_HINT_DURATION);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Save avatar config and custom image to player data
+  useEffect(() => {
+    const playerData: PlayerData = {
+      player: savedPlayerData?.player || {
+        id: "",
+        nickname: "",
+        avatar: "",
+        isHost: false,
+      },
+      avatarConfig,
+      customAvatarImage,
+      roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
+    };
+    saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+  }, [avatarConfig, customAvatarImage, savedPlayerData]);
+
+  const openAvatarModal = useCallback(() => {
+    setIsAvatarModalOpen(true);
+  }, []);
+
+  const closeAvatarModal = useCallback(() => {
+    setIsAvatarModalOpen(false);
+  }, []);
+
+  return {
+    avatarConfig,
+    setAvatarConfig,
+    customAvatarImage,
+    setCustomAvatarImage,
+    isAvatarModalOpen,
+    showAvatarHint,
+    openAvatarModal,
+    closeAvatarModal,
+  };
+};
+
+// Component parts
+const UserProfile: React.FC<{
+  nickname: string;
+  onNicknameChange: (nickname: string) => void;
+  avatarConfig: AvatarFullConfig;
+  customAvatarImage: string | null;
+  showAvatarHint: boolean;
+  onAvatarClick: () => void;
+  t: any;
+}> = ({
+  nickname,
+  onNicknameChange,
+  avatarConfig,
+  customAvatarImage,
+  showAvatarHint,
+  onAvatarClick,
+  t,
+}) => (
+  <div className="flex justify-center items-center gap-4 mb-6">
+    <motion.div className="flex items-center gap-3 lg:gap-4 relative">
+      <motion.div
+        className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-white/10 flex items-center justify-center border-2 border-white/20 cursor-pointer relative"
+        onClick={onAvatarClick}
+        whileHover={animationVariants.avatarContainer.whileHover}
+        animate={
+          showAvatarHint
+            ? {
+                boxShadow: [
+                  "0 0 0 0 rgba(255, 107, 53, 0.7)",
+                  "0 0 0 10px rgba(255, 107, 53, 0)",
+                  "0 0 0 0 rgba(255, 107, 53, 0)",
+                ],
+              }
+            : undefined
+        }
+        transition={
+          showAvatarHint
+            ? {
+                duration: 2,
+                repeat: Infinity,
+                repeatDelay: 1,
+              }
+            : undefined
+        }
+      >
+        {customAvatarImage ? (
+          <img
+            src={customAvatarImage}
+            alt="User avatar"
+            className="w-full h-full object-cover rounded-full"
+          />
+        ) : (
+          <Avatar className="w-full h-full" {...avatarConfig} />
+        )}
+
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity duration-300 rounded-full">
+          <FaEye className="text-white text-xl lg:text-2xl" />
+        </div>
+      </motion.div>
+
+      <AnimatePresence>
+        {showAvatarHint && (
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }}
+            transition={{ duration: 0.5 }}
+            className="absolute bottom-3 -left-24 text-white text-xs py-1 px-2 rounded-lg whitespace-nowrap"
+          >
+            <motion.div
+              animate={{ x: [0, 5, 0] }}
+              transition={{ duration: 1, repeat: Infinity }}
+            >
+              <div className="flex items-center gap-1">
+                <span>Customize</span>
+                <FaChevronRight className="text-xs" />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+
+    <div className="space-y-2 flex-1">
+      <motion.input
+        value={nickname}
+        onChange={(e) => onNicknameChange(e.target.value)}
+        placeholder={t.yourName}
+        className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all text-base"
+        {...animationVariants.inputField}
+      />
+    </div>
+  </div>
+);
+
+// Main Component
 const JoinRoomPage: React.FC = () => {
   // Hooks
   const { t } = useI18n();
-  const params = useParams();
+  const { containerVariants, slideInLeft, fadeUp } = useEnhancedAnimations();
+  const {
+    avatarConfig,
+    setAvatarConfig,
+    customAvatarImage,
+    setCustomAvatarImage,
+    isAvatarModalOpen,
+    showAvatarHint,
+    openAvatarModal,
+    closeAvatarModal,
+  } = useAvatar();
   const router = useRouter();
+  const params = useParams();
+  const roomCode = params.code as string;
 
-  // State
-  const [roomCode, setRoomCode] = useState<string>("");
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [roomExists, setRoomExists] = useState<boolean>(false);
-  const [requiresPassword, setRequiresPassword] = useState<boolean>(false);
-  const [password, setPassword] = useState<string>("");
-  const [passwordError, setPasswordError] = useState<string>("");
-  const [userInfoComplete, setUserInfoComplete] = useState<boolean>(false);
-  const [showUserInfoModal, setShowUserInfoModal] = useState<boolean>(false);
+  // Load player data from localStorage
+  const savedPlayerData = loadFromLocalStorage<PlayerData | null>(
+    LOCAL_STORAGE_KEYS.PLAYER_DATA,
+    null
+  );
+
+  // Local state
+  const [mounted, setMounted] = useState<boolean>(false);
   const [nickname, setNickname] = useState<string>(
-    loadFromLocalStorage(LOCAL_STORAGE_KEYS.NICKNAME, "")
+    savedPlayerData?.player.nickname || ""
   );
-  const [avatarConfig, setAvatarConfig] = useState(
-    loadFromLocalStorage(LOCAL_STORAGE_KEYS.AVATAR_CONFIG, DEFAULT_AVATAR_CONFIG)
-  );
-  const [customAvatarImage, setCustomAvatarImage] = useState<string | null>(
-    loadFromLocalStorage(LOCAL_STORAGE_KEYS.CUSTOM_AVATAR_IMAGE, null)
-  );
-  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState<boolean>(false);
+  const [roomPassword, setRoomPassword] = useState<string>("");
+  const [isJoining, setIsJoining] = useState<boolean>(false);
+  const [roomData, setRoomData] = useState<RoomData | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
-  const [isExistingPlayer, setIsExistingPlayer] = useState<boolean>(false);
+  const [lastRoomCheck, setLastRoomCheck] = useState<number>(0);
+  const [hasSavedPassword, setHasSavedPassword] = useState<boolean>(false);
 
-  // Get room code from URL params
+  // Load room data when component mounts
   useEffect(() => {
-    if (params?.code) {
-      const code = Array.isArray(params.code) ? params.code[0] : params.code;
-      setRoomCode(code.toUpperCase());
-    }
-  }, [params]);
+    const fetchRoomData = async () => {
+      if (!roomCode) {
+        setError("Invalid room code");
+        setIsLoading(false);
+        return;
+      }
 
-  // Check if room exists and if it requires password
-  useEffect(() => {
-    const checkRoom = async () => {
-      if (!roomCode) return;
-
-      setIsLoading(true);
       try {
-        const roomData = await DatabaseService.getRoom(roomCode);
-        
-        if (!roomData) {
-          setRoomExists(false);
+        const data = await DatabaseService.getRoomData(roomCode);
+        if (!data) {
           setError("Room not found");
+          setIsLoading(false);
           return;
         }
 
-        setRoomExists(true);
-        setRequiresPassword(!!roomData.room_password);
+        setRoomData(data);
         
-        // Check if user has complete info
-        const storedNickname = loadFromLocalStorage(LOCAL_STORAGE_KEYS.NICKNAME, "");
-        const hasNickname = !!storedNickname;
-        const hasAvatar = !!loadFromLocalStorage(LOCAL_STORAGE_KEYS.AVATAR_CONFIG, null) || 
-                         !!loadFromLocalStorage(LOCAL_STORAGE_KEYS.CUSTOM_AVATAR_IMAGE, null);
-        
-        // Check if this nickname already exists in the room
-        if (hasNickname) {
-          const nicknameExists = await DatabaseService.checkNicknameInRoom(roomCode, storedNickname);
-          
-          if (nicknameExists) {
-            // Nickname already exists, no need to show modal
-            setIsExistingPlayer(true);
-            setUserInfoComplete(true);
-            setShowUserInfoModal(false);
-            return;
-          }
+        // Check if we have saved room settings for this room
+        const savedSettings = loadRoomSettings();
+        if (savedSettings && savedSettings.roomCode === roomCode && savedSettings.password) {
+          setRoomPassword(savedSettings.password);
+          setHasSavedPassword(true);
         }
         
-        // If we reach here, either no nickname or nickname doesn't exist in room
-        setUserInfoComplete(hasNickname && hasAvatar);
-        setShowUserInfoModal(!hasNickname || !hasAvatar);
-      } catch (err) {
-        console.error("Error checking room:", err);
-        setError("Failed to check room");
-      } finally {
+        setIsLoading(false);
+        setLastRoomCheck(Date.now());
+      } catch (error) {
+        console.error("Failed to fetch room data:", error);
+        setError("Failed to load room data. Please try again.");
         setIsLoading(false);
       }
     };
 
-    if (roomCode) {
-      checkRoom();
-    }
+    fetchRoomData();
   }, [roomCode]);
 
-  // Handle password submission
-  const handlePasswordSubmit = useCallback(async () => {
-    if (!password) {
-      setPasswordError("Password is required");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const isValid = await DatabaseService.verifyRoomPassword(roomCode, password);
-      
-      if (isValid) {
-        setRequiresPassword(false);
-        setPasswordError("");
-        
-        // Check user info again after password is verified
-        const storedNickname = loadFromLocalStorage(LOCAL_STORAGE_KEYS.NICKNAME, "");
-        const hasNickname = !!storedNickname;
-        const hasAvatar = !!loadFromLocalStorage(LOCAL_STORAGE_KEYS.AVATAR_CONFIG, null) || 
-                         !!loadFromLocalStorage(LOCAL_STORAGE_KEYS.CUSTOM_AVATAR_IMAGE, null);
-        
-        // Check if this nickname already exists in the room
-        if (hasNickname) {
-          const nicknameExists = await DatabaseService.checkNicknameInRoom(roomCode, storedNickname);
-          
-          if (nicknameExists) {
-            // Nickname already exists, no need to show modal
-            setIsExistingPlayer(true);
-            setUserInfoComplete(true);
-            setShowUserInfoModal(false);
-            return;
-          }
-        }
-        
-        setUserInfoComplete(hasNickname && hasAvatar);
-        setShowUserInfoModal(!hasNickname || !hasAvatar);
-      } else {
-        setPasswordError("Incorrect password");
-      }
-    } catch (err) {
-      setPasswordError("Failed to verify password");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [password, roomCode]);
-
-  // Handle user info submission
-  const handleUserInfoSubmit = useCallback(async () => {
-    if (!nickname.trim()) {
-      setError("Nickname is required");
-      return;
-    }
-
-    // Check if this nickname already exists in the room
-    const nicknameExists = await DatabaseService.checkNicknameInRoom(roomCode, nickname);
-    
-    if (nicknameExists) {
-      setError("This nickname is already taken in this room");
-      return;
-    }
-
-    // Save to local storage
-    saveToLocalStorage(LOCAL_STORAGE_KEYS.NICKNAME, nickname);
-    saveToLocalStorage(LOCAL_STORAGE_KEYS.AVATAR_CONFIG, avatarConfig);
-    if (customAvatarImage) {
-      saveToLocalStorage(LOCAL_STORAGE_KEYS.CUSTOM_AVATAR_IMAGE, customAvatarImage);
-    }
-
-    setUserInfoComplete(true);
-    setShowUserInfoModal(false);
-    joinRoom();
-  }, [nickname, avatarConfig, customAvatarImage, roomCode]);
-
-  // Join the room
-  const joinRoom = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      // Only add player to database if they're not already in the room
-      if (!isExistingPlayer) {
-        const player: Player = {
-          nickname,
-          avatar: customAvatarImage || JSON.stringify(avatarConfig),
-          isHost: false
-        };
-
-        await DatabaseService.joinRoom(roomCode, player);
-      }
-      
-      // Redirect to lobby
-      router.push(`/lobby/${roomCode}`);
-    } catch (err) {
-      console.error("Failed to join room:", err);
-      setError("Failed to join room. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [roomCode, nickname, avatarConfig, customAvatarImage, router, isExistingPlayer]);
-
-  // If user info is complete and no password is required, join the room automatically
+  // Periodically check if room still exists
   useEffect(() => {
-    if (roomExists && userInfoComplete && !requiresPassword && !showUserInfoModal) {
-      joinRoom();
+    if (!roomData) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const data = await DatabaseService.getRoomData(roomCode);
+        if (!data) {
+          setError("This room has been closed");
+          setRoomData(null);
+        } else {
+          setLastRoomCheck(Date.now());
+        }
+      } catch (error) {
+        console.error("Error checking room status:", error);
+      }
+    }, ROOM_CHECK_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [roomData, roomCode]);
+
+  // Save player data to localStorage whenever it changes
+  useEffect(() => {
+    const playerData: PlayerData = {
+      player: {
+        id: savedPlayerData?.player.id || generateUniqueId(),
+        nickname,
+        avatar: customAvatarImage || JSON.stringify(avatarConfig),
+        isHost: false, // Always false when joining a room
+      },
+      avatarConfig,
+      customAvatarImage,
+      roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
+    };
+    saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+  }, [nickname, avatarConfig, customAvatarImage, savedPlayerData]);
+
+  // Initialize component
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Validation functions
+  const validateNickname = useCallback((nickname: string): boolean => {
+    return nickname.trim().length > 0;
+  }, []);
+
+  // Event handlers
+  const handleNicknameChange = useCallback((newNickname: string) => {
+    setNickname(newNickname);
+  }, []);
+
+  const handleJoinRoom = useCallback(async () => {
+    if (!validateNickname(nickname)) {
+      setError("Please enter your nickname");
+      return;
     }
-  }, [roomExists, userInfoComplete, requiresPassword, showUserInfoModal, joinRoom]);
+
+    setIsJoining(true);
+    setError("");
+
+    try {
+      // Revalidate room existence before joining
+      const data = await DatabaseService.getRoomData(roomCode);
+      if (!data) {
+        setError("Room no longer exists");
+        setIsJoining(false);
+        return;
+      }
+
+      // Check if room requires password
+      if (data.room_password) {
+        const isValid = await DatabaseService.verifyRoomPassword(
+          roomCode,
+          roomPassword
+        );
+        if (!isValid) {
+          setError("Incorrect password");
+          setIsJoining(false);
+          return;
+        }
+      }
+
+      const player = createPlayerData(
+        nickname,
+        avatarConfig,
+        customAvatarImage,
+        false // isHost = false when joining room
+      );
+      
+      // Update player data with guest status
+      const playerData: PlayerData = {
+        player,
+        avatarConfig,
+        customAvatarImage,
+        roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
+      };
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+      
+      // Save room settings if password was provided and not empty
+      if (roomPassword && roomPassword.trim() !== "") {
+        const roomSettings: RoomSettings = {
+          roomCode,
+          password: roomPassword,
+          gameModeId: data.game_mode || null,
+          quizPackId: data.quiz_pack || null,
+          createdAt: Date.now(),
+        };
+        saveRoomSettings(roomSettings);
+      }
+      
+      await DatabaseService.joinRoom(roomCode, player);
+      router.push(`/lobby/${roomCode}`);
+    } catch (error) {
+      console.error("Failed to join room:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to join room. Please try again.";
+      setError(errorMessage);
+    } finally {
+      setIsJoining(false);
+    }
+  }, [nickname, avatarConfig, customAvatarImage, roomCode, roomPassword, router, validateNickname, savedPlayerData]);
 
   // Loading state
-  if (isLoading) {
+  if (!mounted || isLoading) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
-        <div className="text-center text-white">
+      <div className="h-screen w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+        <div className="flex flex-col items-center">
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            className="flex justify-center mb-4"
+            className="text-white text-4xl mb-4"
           >
-            <FaSpinner className="text-4xl" />
+            <FaSpinner />
           </motion.div>
-          <p>Loading room information...</p>
+          <p className="text-white/80">Loading room information...</p>
         </div>
       </div>
     );
   }
 
-  // Room not found
-  if (!roomExists) {
+  // Error state
+  if (error && !roomData) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
-        <div className="text-center text-white p-6 bg-white/10 backdrop-blur-lg rounded-2xl border border-white/20 shadow-xl max-w-md w-full mx-4">
-          <FaExclamationTriangle className="text-4xl text-yellow-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">Room Not Found</h2>
-          <p className="mb-4">The room code <strong>{roomCode}</strong> does not exist or may have been closed.</p>
-          <button
+      <div className="min-h-screen w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
+        <div className="text-center max-w-md">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            className="text-white text-6xl mb-6"
+          >
+            <FaExclamationTriangle />
+          </motion.div>
+          <h1 className="text-white text-2xl font-bold mb-4">Room Not Available</h1>
+          <p className="text-white/80 mb-6">{error}</p>
+          <motion.button
             onClick={() => router.push("/")}
-            className="bg-[#FF6B35] text-white py-2 px-6 rounded-xl font-semibold hover:bg-[#FF7A47] transition-colors"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="bg-[#FF6B35] text-white px-6 py-3 rounded-2xl font-semibold"
           >
             Return to Home
-          </button>
+          </motion.button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
-      {/* Password Modal */}
-      {requiresPassword && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-xl max-w-md w-full"
-          >
-            <h3 className="text-white text-lg font-semibold mb-4">Room Password Required</h3>
-            <p className="text-white/80 mb-4">
-              This room is password protected. Please enter the password to join.
-            </p>
+    <div className="relative min-h-screen w-full font-sans flex flex-col overflow-x-hidden">
+      <Header />
 
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter room password"
-              className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all mb-2"
-            />
-
-            {passwordError && (
-              <p className="text-red-400 mb-4">{passwordError}</p>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => router.push("/")}
-                className="flex-1 py-3 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePasswordSubmit}
-                disabled={isLoading}
-                className="flex-1 py-3 rounded-xl bg-[#FF6B35] text-white hover:bg-[#FF7A47] transition-colors disabled:opacity-50"
-              >
-                {isLoading ? "Verifying..." : "Join Room"}
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-
-      {/* User Info Modal */}
-      {showUserInfoModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-xl max-w-md w-full"
-          >
-            <h3 className="text-white text-lg font-semibold mb-4">Complete Your Profile</h3>
-            <p className="text-white/80 mb-4">
-              Please set your nickname and avatar before joining the room.
-            </p>
-
-            <div className="space-y-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">Nickname</label>
-                <input
-                  type="text"
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                  placeholder="Enter your nickname"
-                  className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">Avatar</label>
-                <div className="flex items-center gap-4">
-                  <div 
-                    className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center border-2 border-white/20 cursor-pointer relative"
-                    onClick={() => setIsAvatarModalOpen(true)}
-                  >
-                    {customAvatarImage ? (
-                      <img
-                        src={customAvatarImage}
-                        alt="User avatar"
-                        className="w-full h-full object-cover rounded-full"
-                      />
-                    ) : (
-                      <Avatar className="w-full h-full" {...avatarConfig} />
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setIsAvatarModalOpen(true)}
-                    className="text-sm text-[#FF6B35] hover:text-[#FF7A47] transition-colors"
-                  >
-                    Customize Avatar
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {error && (
-              <p className="text-red-400 mb-4">{error}</p>
-            )}
-
-            <button
-              onClick={handleUserInfoSubmit}
-              disabled={isLoading}
-              className="w-full py-3 rounded-xl bg-[#FF6B35] text-white hover:bg-[#FF7A47] transition-colors disabled:opacity-50"
-            >
-              {isLoading ? "Joining..." : "Join Room"}
-            </button>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Avatar Customization Modal */}
       <AvatarCustomModal
         isOpen={isAvatarModalOpen}
-        onClose={() => setIsAvatarModalOpen(false)}
+        onClose={closeAvatarModal}
         avatarConfig={avatarConfig}
-        setAvatarConfig={setAvatarConfig as any}
+        setAvatarConfig={setAvatarConfig}
         customAvatarImage={customAvatarImage}
         setCustomAvatarImage={setCustomAvatarImage}
       />
 
-      {/* General Error Display */}
-      {error && !showUserInfoModal && !requiresPassword && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-red-500 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-2"
-          >
-            <FaExclamationTriangle />
-            <span>{error}</span>
+      <motion.main
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="flex-1 mx-auto w-full max-w-md px-4 py-8 flex items-center justify-center"
+      >
+        <motion.div
+          variants={slideInLeft}
+          className="w-full rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-6 shadow-2xl backdrop-blur-md relative"
+        >
+          <div className="text-center mb-6">
+            <motion.h1 
+              variants={fadeUp}
+              className="text-2xl font-bold text-white mb-2"
+            >
+              Join Room
+            </motion.h1>
+            <motion.p 
+              variants={fadeUp}
+              className="text-white/70 text-lg font-mono"
+            >
+              {roomCode}
+            </motion.p>
+            <motion.p 
+              variants={fadeUp}
+              className="text-white/50 text-sm mt-2"
+            >
+              Last checked: {new Date(lastRoomCheck).toLocaleTimeString()}
+            </motion.p>
+            {hasSavedPassword && (
+              <motion.p 
+                variants={fadeUp}
+                className="text-green-400 text-sm mt-1"
+              >
+                Using saved password
+              </motion.p>
+            )}
+          </div>
+
+          {/* User Profile */}
+          <motion.div variants={fadeUp}>
+            <UserProfile
+              nickname={nickname}
+              onNicknameChange={handleNicknameChange}
+              avatarConfig={avatarConfig}
+              customAvatarImage={customAvatarImage}
+              showAvatarHint={showAvatarHint}
+              onAvatarClick={openAvatarModal}
+              t={t}
+            />
           </motion.div>
-        </div>
-      )}
+
+          {/* Password Input (if room is password protected) */}
+          {roomData?.room_password && (
+            <motion.div 
+              variants={fadeUp}
+              className="mb-6"
+            >
+              <label className="block text-sm font-medium text-[#EAEAEA] mb-2">
+                Room Password
+              </label>
+              <motion.input
+                type="password"
+                value={roomPassword}
+                onChange={(e) => setRoomPassword(e.target.value)}
+                placeholder="Enter room password"
+                className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all"
+                {...animationVariants.inputField}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleJoinRoom();
+                  }
+                }}
+              />
+            </motion.div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-200 text-sm"
+            >
+              {error}
+            </motion.div>
+          )}
+
+          {/* Join Button */}
+          <motion.button
+            onClick={handleJoinRoom}
+            disabled={isJoining}
+            className="w-full flex items-center justify-center gap-3 rounded-2xl bg-[#FF6B35] px-6 py-4 font-semibold text-white shadow-lg shadow-[#FF6B35]/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            {...animationVariants.joinButton}
+          >
+            {isJoining ? (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+              >
+                <FaSpinner />
+              </motion.div>
+            ) : (
+              <FaDoorOpen />
+            )}
+            {isJoining ? "Joining..." : "Join Room"}
+          </motion.button>
+        </motion.div>
+      </motion.main>
     </div>
   );
 };

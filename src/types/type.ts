@@ -20,11 +20,20 @@ export interface Player {
   hasAnswered?: boolean;
   selectedAnswer?: number;
 }
+export interface RoomSettings {
+  roomCode: string;
+  password: string | null;
+  gameModeId: number | null;
+  quizPackId: number | null;
+  createdAt: number;
+}
 export interface PlayerData {
   player: Player;
   avatarConfig: AvatarFullConfig;
   customAvatarImage: string | null;
+  roomSettings?: RoomSettings; // Added roomSettings to PlayerData
 }
+
 // Types
 export type TabType = "mode" | "settings" | "packs";
 

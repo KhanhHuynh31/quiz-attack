@@ -2,7 +2,6 @@
 
 import React, { useCallback, useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   FaHome,
@@ -74,7 +73,12 @@ const animations = {
     initial: { opacity: 0, y: 20 },
     animate: { opacity: 1, y: 0 },
     exit: { opacity: 0, y: -20 },
-    transition: { type: "spring" as const, stiffness: 300, damping: 30, duration: 0.2 },
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 30,
+      duration: 0.2,
+    },
   },
   playersExpand: {
     initial: { height: 0, opacity: 0 },
@@ -84,37 +88,59 @@ const animations = {
   },
 } as const;
 
+// Utility Functions
+const generateRoomCode = (): string => {
+  if (typeof window === "undefined") return "QUIZ123";
+  try {
+    const pathParts = window.location.pathname.split("/");
+    return pathParts[pathParts.length - 1] || "QUIZ123";
+  } catch {
+    return "QUIZ123";
+  }
+};
+
+const generateShareLink = (roomCode: string): string => {
+  if (typeof window === "undefined") return "";
+  try {
+    return `${window.location.origin}/join/${roomCode}`;
+  } catch {
+    return "";
+  }
+};
+
 // Custom Hooks
 const useRoomData = (initialRoomCode?: string) => {
   const [roomCode, setRoomCode] = useState<string>("");
   const [shareLink, setShareLink] = useState<string>("");
-  const router = useRouter();
 
   useEffect(() => {
-    // Get room code from router path
-    const pathParts = window.location.pathname.split("/");
-    const codeFromPath = pathParts[pathParts.length - 1];
-    const code = initialRoomCode || codeFromPath || "QUIZ123";
-    const link = `${window.location.origin}/join/${code}`;
+    const code = initialRoomCode || generateRoomCode();
+    const link = generateShareLink(code);
     setRoomCode(code);
     setShareLink(link);
-  }, [initialRoomCode, router]);
+  }, [initialRoomCode]);
 
   return { roomCode, shareLink };
 };
 
-const useSupabaseRoom = (roomCode: string) => {
+type PlayerPresence = Player & { presence_ref: string };
+
+const useSupabaseRoom = (roomCode: string, playerData: PlayerData | null) => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [gameSettings, setGameSettings] = useState<GameSettings>({
     ...DEFAULT_GAME_SETTINGS,
     selectedQuizPack: DEFAULT_QUIZ_PACKS[0],
   });
-  const [selectedGameMode, setSelectedGameMode] = useState<GameMode | null>(GAME_MODES[0] || null);
+  const [selectedGameMode, setSelectedGameMode] = useState<GameMode | null>(
+    GAME_MODES[0] || null
+  );
+  const [roomClosed, setRoomClosed] = useState(false);
+  const [roomPassword, setRoomPassword] = useState<string | null>(null);
 
   const loadRoomData = useCallback(async () => {
     if (!roomCode) return;
-    
+
     setIsLoading(true);
     try {
       let { data: room, error } = await supabase
@@ -129,117 +155,137 @@ const useSupabaseRoom = (roomCode: string) => {
       }
 
       if (!room) {
-        // Try to create new room, but handle potential race conditions
-        try {
-          const defaultSettingList = [JSON.stringify(DEFAULT_GAME_SETTINGS)];
-          const defaultGameMode = GAME_MODES[0]?.id || 1;
-          const defaultQuizPack = DEFAULT_QUIZ_PACKS[0].id;
-
-          const { data: newRoom, error: insertError } = await supabase
-            .from("room")
-            .insert({
-              room_code: roomCode,
-              player_list: [],
-              setting_list: defaultSettingList,
-              game_mode: defaultGameMode,
-              quiz_pack: defaultQuizPack,
-            })
-            .select()
-            .single();
-
-          if (insertError) {
-            // If room was created by another instance, try to fetch it again
-            if (insertError.code === "23505") { // Unique violation
-              const { data: existingRoom } = await supabase
-                .from("room")
-                .select("*")
-                .eq("room_code", roomCode)
-                .single();
-              room = existingRoom;
-            } else {
-              console.error("Failed to create room:", insertError);
-              return;
-            }
-          } else {
-            room = newRoom;
-          }
-        } catch (createError) {
-          console.error("Error creating room:", createError);
+        if (!playerData?.player.isHost) {
+          setRoomClosed(true);
+          setIsLoading(false);
           return;
         }
+        // Create new room
+        const defaultSettingList = [JSON.stringify(DEFAULT_GAME_SETTINGS)];
+        const defaultGameMode = GAME_MODES[0]?.id || 1;
+        const defaultQuizPack = DEFAULT_QUIZ_PACKS[0].id;
+
+        const { data: newRoom, error: insertError } = await supabase
+          .from("room")
+          .insert({
+            room_code: roomCode,
+            setting_list: defaultSettingList,
+            game_mode: defaultGameMode,
+            quiz_pack: defaultQuizPack,
+            password: roomPassword,
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error("Failed to create room:", insertError);
+          return;
+        }
+        room = newRoom;
       }
 
       // Load data from room
-      const loadedPlayers = room.player_list?.map((p: string) => JSON.parse(p)) || [];
-      setPlayers(loadedPlayers);
-
-      const parsedSettings = room.setting_list?.[0] 
-        ? JSON.parse(room.setting_list[0]) 
+      const parsedSettings = room.setting_list?.[0]
+        ? JSON.parse(room.setting_list[0])
         : DEFAULT_GAME_SETTINGS;
-      
+
       const quizPackId = room.quiz_pack || DEFAULT_QUIZ_PACKS[0].id;
-      const selectedQuizPack = DEFAULT_QUIZ_PACKS.find((pack: QuizPack) => pack.id === quizPackId) || DEFAULT_QUIZ_PACKS[0];
-      
+      const selectedQuizPack =
+        DEFAULT_QUIZ_PACKS.find((pack: QuizPack) => pack.id === quizPackId) ||
+        DEFAULT_QUIZ_PACKS[0];
+
       setGameSettings({ ...parsedSettings, selectedQuizPack });
 
-      const selectedMode = GAME_MODES.find((mode: GameMode) => mode.id === room.game_mode);
+      const selectedMode = GAME_MODES.find(
+        (mode: GameMode) => mode.id === room.game_mode
+      );
       setSelectedGameMode(selectedMode || GAME_MODES[0] || null);
 
+      // Set room password - FIXED: Use correct column name "password"
+      setRoomPassword(room.room_password || null);
     } catch (error) {
       console.error("Error loading room data:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [roomCode]);
+  }, [roomCode, playerData, roomPassword]);
 
-  const saveRoomData = useCallback(async (players: Player[], settings: GameSettings, gameMode: GameMode | null) => {
-    try {
-      const playerList = players.map((p) => JSON.stringify(p));
-      const settingsToStore = { ...settings, selectedQuizPack: undefined };
-      const settingList = [JSON.stringify(settingsToStore)];
-      const gameModeId = gameMode?.id || 0;
-      const quizPackId = settings.selectedQuizPack?.id || 0;
+  const saveRoomData = useCallback(
+    async (settings: GameSettings, gameMode: GameMode | null) => {
+      try {
+        const settingsToStore = { ...settings, selectedQuizPack: undefined };
+        const settingList = [JSON.stringify(settingsToStore)];
+        const gameModeId = gameMode?.id || 0;
+        const quizPackId = settings.selectedQuizPack?.id || 0;
 
-      // First check if room exists
-      const { data: existingRoom } = await supabase
-        .from("room")
-        .select("room_code")
-        .eq("room_code", roomCode)
-        .single();
-
-      if (existingRoom) {
-        // Update existing room
-        const { error } = await supabase
-          .from("room")
-          .update({
-            player_list: playerList,
-            setting_list: settingList,
-            game_mode: gameModeId,
-            quiz_pack: quizPackId,
-          })
-          .eq("room_code", roomCode);
-
-        if (error) console.error("Failed to update room data:", error);
-      } else {
-        // Insert new room
-        const { error } = await supabase.from("room").insert({
+        const { error } = await supabase.from("room").upsert({
           room_code: roomCode,
-          player_list: playerList,
           setting_list: settingList,
           game_mode: gameModeId,
           quiz_pack: quizPackId,
+          password: roomPassword,
         });
 
-        if (error) console.error("Failed to create room:", error);
+        if (error) console.error("Failed to save room data:", error);
+      } catch (error) {
+        console.error("Error saving to Supabase:", error);
       }
-    } catch (error) {
-      console.error("Error saving to Supabase:", error);
-    }
-  }, [roomCode]);
+    },
+    [roomCode, roomPassword]
+  );
 
   useEffect(() => {
     loadRoomData();
   }, [loadRoomData]);
+
+  // Handle realtime presence for players
+  useEffect(() => {
+    if (!roomCode || !playerData?.player?.id) return;
+
+    const channel = supabase.channel(`room:${roomCode}`);
+
+    const updatePlayers = () => {
+      const state = channel.presenceState();
+      const playerMap = new Map<number, Player>();
+      for (const key in state) {
+        const presences = state[key] as PlayerPresence[];
+        if (presences[0]) {
+          const { presence_ref, ...player } = presences[0];
+          playerMap.set(player.id, player);
+        }
+      }
+      setPlayers(Array.from(playerMap.values()));
+    };
+
+    channel
+      .on("presence", { event: "sync" }, updatePlayers)
+      .on("presence", { event: "join" }, ({ newPresences }) => {
+        const { presence_ref, ...newPlayer } =
+          newPresences[0] as PlayerPresence;
+        setPlayers((prev) => {
+          if (prev.some((p) => p.id === newPlayer.id)) return prev;
+          return [...prev, newPlayer];
+        });
+      })
+      .on("presence", { event: "leave" }, ({ leftPresences }) => {
+        const { presence_ref, ...leftPlayer } =
+          leftPresences[0] as PlayerPresence;
+        setPlayers((prev) => prev.filter((p) => p.id !== leftPlayer.id));
+        if (leftPlayer.isHost) {
+          supabase.from("room").delete().eq("room_code", roomCode);
+          setRoomClosed(true);
+        }
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          await channel.track(playerData.player);
+        }
+      });
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [roomCode, playerData, setPlayers]);
 
   return {
     players,
@@ -250,16 +296,27 @@ const useSupabaseRoom = (roomCode: string) => {
     selectedGameMode,
     setSelectedGameMode,
     saveRoomData,
+    roomClosed,
+    roomPassword,
+    setRoomPassword,
   };
 };
 
 // Main Component
-const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCode }) => {
+const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
+  initialRoomCode,
+}) => {
   // Hooks
   const { language } = useI18n();
-  const { staggerChildren, slideInLeft, slideInRight, fadeUp } = useEnhancedAnimations();
+  const { staggerChildren, slideInLeft, slideInRight, fadeUp } =
+    useEnhancedAnimations();
   const { roomCode, shareLink } = useRoomData(initialRoomCode);
   const router = useRouter();
+
+  const [playerData, setPlayerData] = useState<PlayerData | null>(null);
+  const [shouldRedirectToJoin, setShouldRedirectToJoin] = useState(false);
+  const [passwordValidated, setPasswordValidated] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   const {
     players,
@@ -270,15 +327,21 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
     selectedGameMode,
     setSelectedGameMode,
     saveRoomData,
-  } = useSupabaseRoom(roomCode);
+    roomClosed,
+    roomPassword,
+  } = useSupabaseRoom(roomCode, playerData);
 
   // Player data and permissions
-  const [playerData, setPlayerData] = useState<PlayerData | null>(null);
-  const isHost = useMemo(() => playerData?.player.isHost ?? false, [playerData]);
+  const isHost = useMemo(
+    () => playerData?.player.isHost ?? false,
+    [playerData]
+  );
 
   // UI State
   const [showQRCode, setShowQRCode] = useState(false);
   const [showRoomCode, setShowRoomCode] = useState(false);
+  const [showRoomPass, setShowRoomPass] = useState(false);
+
   const [activeTab, setActiveTab] = useState<TabType>("mode");
   const [isMobileDropdownOpen, setIsMobileDropdownOpen] = useState(false);
   const [isTabChanging, setIsTabChanging] = useState(false);
@@ -286,20 +349,64 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
 
   // Translations
   const t = useMemo(
-    () => lobbyTranslations[language as keyof typeof lobbyTranslations] || lobbyTranslations.en,
+    () =>
+      lobbyTranslations[language as keyof typeof lobbyTranslations] ||
+      lobbyTranslations.en,
     [language]
   );
 
   // Computed values
   const playerCount = players.length;
-  const maxPlayersText = gameSettings.maxPlayers?.toString() || "∞";
   const maskedRoomCode = showRoomCode ? roomCode : "••••••";
-  const canStartGame = isHost && !isLoading && playerCount >= 1;
+  const maskedRoomPass = showRoomPass ? roomPassword : "••••••";
 
-  // Load player data
+  const canStartGame = isHost && !isLoading;
+
+  // Check if stored password matches room password
+  const checkPasswordValidity = useCallback((): boolean => {
+    if (!roomPassword) return true; // No password required
+    
+    const storedRoomSettings = playerData?.roomSettings;
+    return !!(
+      storedRoomSettings &&
+      storedRoomSettings.roomCode === roomCode &&
+      storedRoomSettings.password === roomPassword
+    );
+  }, [roomPassword, playerData, roomCode]);
+
+  // Load player data and check if redirect is needed
   useEffect(() => {
-    setPlayerData(loadPlayerData());
+    const data = loadPlayerData();
+    setPlayerData(data);
+    
+    if (!data || !data.player.nickname || !data.player.avatar) {
+      setShouldRedirectToJoin(true);
+    }
+    
+    setDataLoaded(true);
   }, []);
+
+  // Check if player needs to be redirected to join page
+  useEffect(() => {
+    if (!dataLoaded || isLoading) return;
+
+    if (shouldRedirectToJoin) {
+      router.push(`/join/${roomCode}`);
+      return;
+    }
+
+    // Check password if room has one and player data is loaded
+    if (roomPassword) {
+      const isValid = checkPasswordValidity();
+      setPasswordValidated(isValid);
+      
+      if (!isValid) {
+        router.push(`/join/${roomCode}`);
+      }
+    } else {
+      setPasswordValidated(true);
+    }
+  }, [dataLoaded, isLoading, shouldRedirectToJoin, roomPassword, checkPasswordValidity, roomCode, router]);
 
   // Handle window resize
   useEffect(() => {
@@ -334,8 +441,8 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
   const handleStartGame = useCallback(async () => {
     if (!canStartGame) return;
 
-    await saveRoomData(players, gameSettings, selectedGameMode);
-    
+    await saveRoomData(gameSettings, selectedGameMode);
+
     const gameConfig: GameConfig = {
       gameSettings,
       selectedGameMode,
@@ -345,99 +452,69 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
 
     saveGameConfig(roomCode, gameConfig);
     router.push(`/play/${roomCode}`);
-  }, [canStartGame, players, gameSettings, selectedGameMode, roomCode, router, saveRoomData]);
+  }, [
+    canStartGame,
+    players,
+    gameSettings,
+    selectedGameMode,
+    roomCode,
+    router,
+    saveRoomData,
+  ]);
 
-  const handleMaxPlayersChange = useCallback(
-    (increment: boolean) => {
-      if (!isHost) return;
-      setGameSettings((prev) => {
-        const current = prev.maxPlayers || 8;
-        const newValue = increment ? Math.min(20, current + 1) : Math.max(2, current - 1);
-        return { ...prev, maxPlayers: newValue };
-      });
+  const handleTabChange = useCallback(
+    (newTab: TabType) => {
+      if (newTab === activeTab) return;
+      setIsTabChanging(true);
+      setTimeout(() => {
+        setActiveTab(newTab);
+        setIsTabChanging(false);
+      }, 50);
     },
-    [isHost, setGameSettings]
+    [activeTab]
   );
 
-  const handleToggleMaxPlayersLimit = useCallback(() => {
-    if (!isHost) return;
-    handleSettingChange("maxPlayers", gameSettings.maxPlayers === null ? 8 : null);
-  }, [gameSettings.maxPlayers, handleSettingChange, isHost]);
+  const handleLeaveRoom = useCallback(async () => {
+    if (isHost) {
+      await supabase.from("room").delete().eq("room_code", roomCode);
+    }
+    router.push("/");
+  }, [isHost, roomCode, router]);
 
-  const handleTabChange = useCallback((newTab: TabType) => {
-    if (newTab === activeTab) return;
-    setIsTabChanging(true);
-    setTimeout(() => {
-      setActiveTab(newTab);
-      setIsTabChanging(false);
-    }, 50);
-  }, [activeTab]);
-
-  // Render Functions
-  const renderMaxPlayersControls = () => {
-    if (!isHost) return null;
-
+  // Don't render the lobby until data is loaded and password is validated (if required)
+  if (!dataLoaded || isLoading) {
     return (
-      <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.5 }}
-        className="mb-6 p-4 bg-gradient-to-r from-white/5 to-white/10 rounded-xl border border-white/10"
-      >
-        <div className="flex items-center justify-between">
-          <label className="text-sm font-bold flex items-center space-x-2">
-            <FaUsers className="text-cyan-400" />
-            <span>{t.maxPlayers}</span>
-          </label>
-          <div className="flex items-center space-x-3">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleToggleMaxPlayersLimit}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                gameSettings.maxPlayers === null
-                  ? "bg-blue-500 text-white shadow-lg"
-                  : "bg-white/20 hover:bg-white/30"
-              }`}
-            >
-              {t.unlimited}
-            </motion.button>
-            
-            <AnimatePresence>
-              {gameSettings.maxPlayers !== null && (
-                <motion.div
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0, opacity: 0 }}
-                  className="flex items-center space-x-2"
-                >
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => handleMaxPlayersChange(false)}
-                    className="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-3 py-2 rounded-lg text-sm font-bold transition-all border border-red-400/30"
-                  >
-                    -
-                  </motion.button>
-                  <span className="w-8 text-center text-lg font-bold">
-                    {gameSettings.maxPlayers}
-                  </span>
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => handleMaxPlayersChange(true)}
-                    className="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 py-2 rounded-lg text-sm font-bold transition-all border border-green-400/30"
-                  >
-                    +
-                  </motion.button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+      <div className="min-h-screen flex items-center justify-center text-white">
+        <div className="flex items-center">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            className="text-2xl mr-3"
+          >
+            <FaSync />
+          </motion.div>
+          <span>Loading...</span>
         </div>
-      </motion.div>
+      </div>
     );
-  };
+  }
+
+  if (roomPassword && !passwordValidated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white">
+        <div className="flex items-center">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            className="text-2xl mr-3"
+          >
+            <FaSync />
+          </motion.div>
+          <span>Verifying access...</span>
+        </div>
+      </div>
+    );
+  }
 
   const renderTabs = () => (
     <motion.div
@@ -456,11 +533,17 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
         >
           <div className="flex items-center space-x-3">
             {(() => {
-              const IconComponent = TABS.find((tab) => tab.key === activeTab)?.icon || FaCog;
+              const IconComponent =
+                TABS.find((tab) => tab.key === activeTab)?.icon || FaCog;
               return <IconComponent />;
             })()}
             <span className="font-medium">
-              {t[TABS.find((tab) => tab.key === activeTab)?.labelKey || "settings"]}
+              {
+                t[
+                  TABS.find((tab) => tab.key === activeTab)?.labelKey ||
+                    "settings"
+                ]
+              }
             </span>
             {!isHost && <FaLock className="text-red-400 text-sm ml-2" />}
           </div>
@@ -498,7 +581,9 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
                     }`}
                   >
                     <IconComponent />
-                    <span className="text-sm font-medium">{t[tab.labelKey]}</span>
+                    <span className="text-sm font-medium">
+                      {t[tab.labelKey]}
+                    </span>
                   </motion.button>
                 );
               })}
@@ -542,9 +627,20 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
       </div>
 
       {/* Start Game Button */}
-      <motion.div {...animations.startButton} className="flex-shrink-0 w-full lg:w-auto">
+      <motion.div
+        {...animations.startButton}
+        className="flex-shrink-0 w-full lg:w-auto"
+      >
         <motion.button
-          whileHover={canStartGame ? { scale: 1.02, y: -3, boxShadow: "0 20px 40px rgba(34, 197, 94, 0.3)" } : {}}
+          whileHover={
+            canStartGame
+              ? {
+                  scale: 1.02,
+                  y: -3,
+                  boxShadow: "0 20px 40px rgba(34, 197, 94, 0.3)",
+                }
+              : {}
+          }
           whileTap={canStartGame ? { scale: 0.95 } : {}}
           onClick={handleStartGame}
           disabled={!canStartGame}
@@ -576,7 +672,11 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
             ) : (
               <motion.div
                 animate={{ x: [0, 5, -5, 0] }}
-                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                transition={{
+                  duration: 5,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
               >
                 <FaPlay className="text-2xl" />
               </motion.div>
@@ -631,7 +731,8 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
             selectedPack={gameSettings.selectedQuizPack}
             onPackSelect={
               isHost
-                ? (pack: QuizPack | null) => handleSettingChange("selectedQuizPack", pack)
+                ? (pack: QuizPack | null) =>
+                    handleSettingChange("selectedQuizPack", pack)
                 : () => {}
             }
           />
@@ -712,7 +813,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
             <FaUsers className="text-2xl text-blue-400" />
           </motion.div>
           <h2 className="text-xl font-bold">
-            {t.players} ({playerCount}/{maxPlayersText})
+            {t.players} ({playerCount})
           </h2>
         </div>
         <button
@@ -722,8 +823,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
           <FaChevronLeft />
         </button>
       </motion.div>
-
-      {renderMaxPlayersControls()}
 
       <motion.div
         variants={staggerChildren}
@@ -766,6 +865,25 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
     </motion.section>
   );
 
+  if (roomClosed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white ">
+        <div className="bg-gray-800 p-8 rounded-xl text-center border border-white/20 shadow-xl">
+          <p className="text-xl mb-4">The host has left the room.</p>
+          <p className="mb-6">The room no longer exists.</p>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => router.push("/")}
+            className="bg-blue-500 px-6 py-3 rounded-lg font-medium"
+          >
+            Go Home
+          </motion.button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen text-white flex flex-col lg:max-h-screen lg:overflow-hidden">
       {/* Header */}
@@ -776,17 +894,16 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
         <motion.button
           whileHover={{ scale: 1.05, y: -2 }}
           whileTap={{ scale: 0.95 }}
+          onClick={handleLeaveRoom}
           className="flex items-center space-x-3 bg-white/10 backdrop-blur-lg px-6 py-3 rounded-xl hover:bg-white/20 transition-all border border-white/20 shadow-lg"
         >
-          <Link href="/" className="flex items-center space-x-3">
-            <motion.div
-              animate={{ rotate: [0, -10, 10, 0] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <FaHome className="text-xl text-blue-400" />
-            </motion.div>
-            <span className="font-medium">{t.home}</span>
-          </Link>
+          <motion.div
+            animate={{ rotate: [0, -10, 10, 0] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <FaHome className="text-xl text-blue-400" />
+          </motion.div>
+          <span className="font-medium">{t.home}</span>
         </motion.button>
 
         <motion.div
@@ -803,19 +920,43 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
           >
             Quiz Attack
           </motion.h1>
-          <div className="flex items-center justify-center space-x-3 mt-2">
-            <span className="text-sm text-white/70 font-medium">{t.room}:</span>
-            <div className="flex items-center space-x-2 bg-white/10 px-3 py-1 rounded-lg">
-              <span className="text-sm font-mono font-bold">{maskedRoomCode}</span>
-              <motion.button
-                whileHover={{ scale: 1.2 }}
-                whileTap={{ scale: 0.8 }}
-                onClick={() => setShowRoomCode(!showRoomCode)}
-                className="text-white/70 hover:text-white transition-colors"
-              >
-                {showRoomCode ? <FaEyeSlash /> : <FaEye />}
-              </motion.button>
+          <div className="flex  items-center gap-4 justify-center mt-2 space-y-2">
+            <div className="flex items-center justify-center space-x-3">
+              <span className="text-sm text-white/70 font-medium">
+                {t.room}:
+              </span>
+              <div className="flex items-center space-x-2 bg-white/10 px-3 py-1 rounded-lg">
+                <span className="text-sm font-mono font-bold">
+                  {maskedRoomCode}
+                </span>
+                <motion.button
+                  whileHover={{ scale: 1.2 }}
+                  whileTap={{ scale: 0.8 }}
+                  onClick={() => setShowRoomCode(!showRoomCode)}
+                  className="text-white/70 hover:text-white transition-colors"
+                >
+                  {showRoomCode ? <FaEyeSlash /> : <FaEye />}
+                </motion.button>
+              </div>
             </div>
+            {roomPassword && (
+              <div className="flex items-center justify-center space-x-3">
+                <span className="text-sm text-white/70 font-medium">Pass:</span>
+                <div className="flex items-center space-x-2 bg-white/10 px-3 py-1 rounded-lg">
+                  <span className="text-sm font-mono font-bold">
+                    {maskedRoomPass}
+                  </span>
+                  <motion.button
+                    whileHover={{ scale: 1.2 }}
+                    whileTap={{ scale: 0.8 }}
+                    onClick={() => setShowRoomPass(!showRoomPass)}
+                    className="text-white/70 hover:text-white transition-colors"
+                  >
+                    {showRoomPass ? <FaEyeSlash /> : <FaEye />}
+                  </motion.button>
+                </div>
+              </div>
+            )}
           </div>
         </motion.div>
         <LanguageSelector />
@@ -829,7 +970,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
             <motion.div
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
+              exit={{ opacity: 0, y: 20 }}
               className="block lg:hidden mb-4"
             >
               <motion.button
@@ -841,7 +982,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
                 <div className="flex items-center space-x-3">
                   <FaUsers className="text-blue-400" />
                   <span className="font-medium">
-                    {t.players} ({playerCount}/{maxPlayersText})
+                    {t.players} ({playerCount})
                   </span>
                 </div>
                 <FaChevronUp />
@@ -862,11 +1003,9 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
               </motion.div>
             )}
           </AnimatePresence>
-          
+
           {/* Desktop Players List */}
-          <div className="hidden lg:block">
-            {renderPlayersList()}
-          </div>
+          <div className="hidden lg:block">{renderPlayersList()}</div>
 
           {/* Game Configuration - Right Panel */}
           <motion.section
@@ -874,7 +1013,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({ initialRoomCo
             initial="hidden"
             animate="visible"
             className="lg:col-span-2 bg-white/10 backdrop-blur-lg rounded-2xl p-6 flex flex-col h-full overflow-hidden border border-white/20 shadow-xl"
-            >
+          >
             <ShareSection
               shareLink={shareLink}
               roomCode={roomCode}

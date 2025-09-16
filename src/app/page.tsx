@@ -52,6 +52,15 @@ interface PlayerData {
   player: Player;
   avatarConfig: AvatarFullConfig;
   customAvatarImage: string | null;
+  roomSettings?: RoomSettings; // Added roomSettings to PlayerData
+}
+
+interface RoomSettings {
+  roomCode: string;
+  password: string | null;
+  gameModeId: number | null;
+  quizPackId: number | null;
+  createdAt: number;
 }
 
 interface RoomData {
@@ -69,6 +78,7 @@ const CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const AVATAR_HINT_DURATION = 5000;
 const COPY_SUCCESS_DURATION = 1500;
 const DESKTOP_BREAKPOINT = 1024;
+const ROOM_SETTINGS_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 
 const DEFAULT_AVATAR_CONFIG = genConfig();
 
@@ -147,6 +157,59 @@ const createPlayerData = (
     avatar: customAvatarImage || JSON.stringify(avatarConfig),
     isHost,
   };
+};
+
+// Room settings storage utilities - now stored in PLAYER_DATA
+const saveRoomSettings = (settings: RoomSettings): void => {
+  try {
+    const playerData = loadFromLocalStorage<PlayerData>(
+      LOCAL_STORAGE_KEYS.PLAYER_DATA,
+      {
+        player: {
+          id: "",
+          nickname: "",
+          avatar: "",
+          isHost: false,
+        },
+        avatarConfig: DEFAULT_AVATAR_CONFIG,
+        customAvatarImage: null,
+      }
+    );
+    
+    playerData.roomSettings = settings;
+    saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+  } catch (error) {
+    console.error("Failed to save room settings:", error);
+  }
+};
+
+const loadRoomSettings = (): RoomSettings | null => {
+  try {
+    const playerData = loadFromLocalStorage<PlayerData | null>(
+      LOCAL_STORAGE_KEYS.PLAYER_DATA,
+      null
+    );
+    
+    if (!playerData || !playerData.roomSettings) {
+      return null;
+    }
+    
+    const roomSettings = playerData.roomSettings;
+    
+    // Check if settings are expired (24 hours)
+    const now = Date.now();
+    if (roomSettings.createdAt + ROOM_SETTINGS_EXPIRY < now) {
+      // Remove expired settings
+      const updatedPlayerData = { ...playerData, roomSettings: undefined };
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, updatedPlayerData);
+      return null;
+    }
+    
+    return roomSettings;
+  } catch (error) {
+    console.error("Failed to load room settings:", error);
+    return null;
+  }
 };
 
 // Database operations
@@ -388,6 +451,7 @@ const useAvatar = () => {
       },
       avatarConfig,
       customAvatarImage,
+      roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
     };
     saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
   }, [avatarConfig, customAvatarImage, savedPlayerData]);
@@ -615,6 +679,29 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
   const [joinPassword, setJoinPassword] = useState<string>("");
   const [passwordError, setPasswordError] = useState<string>("");
 
+  // Load room settings when component mounts
+  useEffect(() => {
+    const savedSettings = loadRoomSettings();
+    if (savedSettings) {
+      // Only apply settings if they match the current room code (if we have one)
+      if (!initialRoomCode || savedSettings.roomCode === initialRoomCode) {
+        if (savedSettings.gameModeId) {
+          // You'll need to implement a way to get GameMode by ID
+          // For now, we'll just set the ID and let the selectors handle it
+          // setSelectedGameMode(findGameModeById(savedSettings.gameModeId));
+        }
+        if (savedSettings.quizPackId) {
+          // You'll need to implement a way to get QuizPack by ID
+          // setSelectedPack(findQuizPackById(savedSettings.quizPackId));
+        }
+        if (savedSettings.password) {
+          setRoomPassword(savedSettings.password);
+          setIsPasswordProtected(true);
+        }
+      }
+    }
+  }, [initialRoomCode]);
+
   // Save player data to localStorage whenever it changes
   useEffect(() => {
     const playerData: PlayerData = {
@@ -626,9 +713,24 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
       },
       avatarConfig,
       customAvatarImage,
+      roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
     };
     saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
   }, [nickname, avatarConfig, customAvatarImage, savedPlayerData]);
+
+  // Save room settings when password changes (only if not empty)
+  useEffect(() => {
+    if (roomCode && roomPassword && roomPassword.trim() !== "") {
+      const roomSettings: RoomSettings = {
+        roomCode,
+        password: roomPassword,
+        gameModeId: selectedGameMode?.id || null,
+        quizPackId: selectedPack?.id || null,
+        createdAt: Date.now(),
+      };
+      saveRoomSettings(roomSettings);
+    }
+  }, [roomCode, roomPassword, selectedGameMode, selectedPack]);
 
   // Initialize component
   useEffect(() => {
@@ -651,7 +753,10 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
 
   const handlePasswordToggle = useCallback(() => {
     setIsPasswordProtected((prev) => !prev);
-  }, []);
+    if (!isPasswordProtected) {
+      setRoomPassword("");
+    }
+  }, [isPasswordProtected]);
 
   const handleTabChange = useCallback((tab: TabType) => {
     setActiveTab(tab);
@@ -686,6 +791,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         player,
         avatarConfig,
         customAvatarImage,
+        roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
       };
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
       
@@ -694,8 +800,21 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         player,
         selectedGameMode,
         selectedPack,
-        isPasswordProtected ? roomPassword : null
+        isPasswordProtected && roomPassword ? roomPassword : null
       );
+
+      // Save room settings before navigating (only if password is not empty)
+      if (isPasswordProtected && roomPassword && roomPassword.trim() !== "") {
+        const roomSettings: RoomSettings = {
+          roomCode,
+          password: roomPassword,
+          gameModeId: selectedGameMode?.id || null,
+          quizPackId: selectedPack?.id || null,
+          createdAt: Date.now(),
+        };
+        saveRoomSettings(roomSettings);
+      }
+
       router.push(`/lobby/${roomCode}`);
     } catch (error) {
       console.error("Failed to create room:", error);
@@ -719,9 +838,10 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     router,
     validateNickname,
     validateRoomCode,
+    savedPlayerData,
   ]);
 
-  const proceedWithJoin = async (roomCode: string) => {
+  const proceedWithJoin = async (roomCode: string, password?: string) => {
     setIsJoining(true);
     try {
       const player = createPlayerData(
@@ -736,10 +856,24 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         player,
         avatarConfig,
         customAvatarImage,
+        roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
       };
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
       
       await DatabaseService.joinRoom(roomCode, player);
+
+      // Save room settings if password was provided and not empty
+      if (password && password.trim() !== "") {
+        const roomSettings: RoomSettings = {
+          roomCode,
+          password,
+          gameModeId: null, // Will be loaded from room data later
+          quizPackId: null, // Will be loaded from room data later
+          createdAt: Date.now(),
+        };
+        saveRoomSettings(roomSettings);
+      }
+
       router.push(`/lobby/${roomCode}`);
     } catch (error) {
       console.error("Failed to join room:", error);
@@ -762,6 +896,20 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     if (!validateRoomCode(joinCode)) {
       alert("Please enter a valid room code");
       return;
+    }
+
+    // Check for saved room settings first
+    const savedSettings = loadRoomSettings();
+    if (savedSettings && savedSettings.roomCode === joinCode && savedSettings.password) {
+      // Use saved password
+      const isValid = await DatabaseService.verifyRoomPassword(
+        joinCode,
+        savedSettings.password
+      );
+      if (isValid) {
+        await proceedWithJoin(joinCode, savedSettings.password);
+        return;
+      }
     }
 
     // Check if room requires password
@@ -796,7 +944,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
       if (isValid) {
         setShowPasswordModal(false);
         setPasswordError("");
-        await proceedWithJoin(roomToJoin);
+        await proceedWithJoin(roomToJoin, joinPassword);
       } else {
         setPasswordError("Incorrect password");
       }
@@ -847,6 +995,11 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
               onChange={(e) => setJoinPassword(e.target.value)}
               placeholder="Enter room password"
               className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all mb-4"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  handlePasswordSubmit();
+                }
+              }}
             />
 
             {passwordError && (
