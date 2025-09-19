@@ -125,7 +125,7 @@ const useRoomData = (initialRoomCode?: string) => {
 
 type PlayerPresence = Player & { presence_ref: string };
 
-const useSupabaseRoom = (roomCode: string, playerData: PlayerData | null) => {
+const useSupabaseRoom = (roomCode: string, playerData: PlayerData | null, isVerified: boolean) => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [gameSettings, setGameSettings] = useState<GameSettings>({
@@ -172,7 +172,7 @@ const useSupabaseRoom = (roomCode: string, playerData: PlayerData | null) => {
             setting_list: defaultSettingList,
             game_mode: defaultGameMode,
             quiz_pack: defaultQuizPack,
-            password: roomPassword,
+            room_password: null, // Use null instead of roomPassword since it's not defined yet
           })
           .select()
           .single();
@@ -201,14 +201,13 @@ const useSupabaseRoom = (roomCode: string, playerData: PlayerData | null) => {
       );
       setSelectedGameMode(selectedMode || GAME_MODES[0] || null);
 
-      // Set room password - FIXED: Use correct column name "password"
       setRoomPassword(room.room_password || null);
     } catch (error) {
       console.error("Error loading room data:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [roomCode, playerData, roomPassword]);
+  }, [roomCode, playerData]);
 
   const saveRoomData = useCallback(
     async (settings: GameSettings, gameMode: GameMode | null) => {
@@ -223,10 +222,14 @@ const useSupabaseRoom = (roomCode: string, playerData: PlayerData | null) => {
           setting_list: settingList,
           game_mode: gameModeId,
           quiz_pack: quizPackId,
-          password: roomPassword,
+          room_password: roomPassword,
         });
 
-        if (error) console.error("Failed to save room data:", error);
+        if (error) {
+          console.log("ERROR:",error)
+          
+        
+        }
       } catch (error) {
         console.error("Error saving to Supabase:", error);
       }
@@ -238,9 +241,9 @@ const useSupabaseRoom = (roomCode: string, playerData: PlayerData | null) => {
     loadRoomData();
   }, [loadRoomData]);
 
-  // Handle realtime presence for players
+  // Handle realtime presence for players - only if verified
   useEffect(() => {
-    if (!roomCode || !playerData?.player?.id) return;
+    if (!roomCode || !playerData?.player?.id || !isVerified) return;
 
     const channel = supabase.channel(`room:${roomCode}`);
 
@@ -276,6 +279,27 @@ const useSupabaseRoom = (roomCode: string, playerData: PlayerData | null) => {
           setRoomClosed(true);
         }
       })
+      // Add listener for game start event
+      .on("broadcast", { event: "game_start" }, async ({ payload }) => {
+        if (payload.roomCode === roomCode && !playerData.player.isHost) {
+          // Save game config locally for non-host players
+          if (payload.gameConfig) {
+            const gameConfig: GameConfig = {
+              gameSettings: payload.gameConfig.gameSettings,
+              selectedGameMode: payload.gameConfig.selectedGameMode,
+              players: payload.gameConfig.players,
+              roomCode,
+            };
+            saveGameConfig(roomCode, gameConfig);
+          }
+          
+          // Add a small delay to ensure everything is saved
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          // Navigate to game page
+          window.location.href = `/play/${roomCode}`;
+        }
+      })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
           await channel.track(playerData.player);
@@ -285,7 +309,7 @@ const useSupabaseRoom = (roomCode: string, playerData: PlayerData | null) => {
     return () => {
       channel.unsubscribe();
     };
-  }, [roomCode, playerData, setPlayers]);
+  }, [roomCode, playerData, setPlayers, isVerified]);
 
   return {
     players,
@@ -318,6 +342,17 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   const [passwordValidated, setPasswordValidated] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
 
+  // Determine if player is verified (has valid data and password if required)
+  const isPlayerVerified = useMemo(() => {
+    return (
+      dataLoaded &&
+      playerData &&
+      playerData.player.nickname &&
+      playerData.player.avatar &&
+      passwordValidated
+    );
+  }, [dataLoaded, playerData, passwordValidated]);
+
   const {
     players,
     setPlayers,
@@ -329,7 +364,19 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     saveRoomData,
     roomClosed,
     roomPassword,
-  } = useSupabaseRoom(roomCode, playerData);
+  } = useSupabaseRoom(roomCode, playerData, Boolean(isPlayerVerified));
+
+  // Check if stored password matches room password
+  const checkPasswordValidity = useCallback((currentRoomPassword: string | null): boolean => {
+    if (!currentRoomPassword) return true; // No password required
+
+    const storedRoomSettings = playerData?.roomSettings;
+    return !!(
+      storedRoomSettings &&
+      storedRoomSettings.roomCode === roomCode &&
+      storedRoomSettings.password === currentRoomPassword
+    );
+  }, [playerData, roomCode]);
 
   // Player data and permissions
   const isHost = useMemo(
@@ -360,29 +407,17 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   const maskedRoomCode = showRoomCode ? roomCode : "••••••";
   const maskedRoomPass = showRoomPass ? roomPassword : "••••••";
 
-  const canStartGame = isHost && !isLoading;
-
-  // Check if stored password matches room password
-  const checkPasswordValidity = useCallback((): boolean => {
-    if (!roomPassword) return true; // No password required
-    
-    const storedRoomSettings = playerData?.roomSettings;
-    return !!(
-      storedRoomSettings &&
-      storedRoomSettings.roomCode === roomCode &&
-      storedRoomSettings.password === roomPassword
-    );
-  }, [roomPassword, playerData, roomCode]);
+  const canStartGame = isHost && !isLoading && isPlayerVerified;
 
   // Load player data and check if redirect is needed
   useEffect(() => {
     const data = loadPlayerData();
     setPlayerData(data);
-    
+
     if (!data || !data.player.nickname || !data.player.avatar) {
       setShouldRedirectToJoin(true);
     }
-    
+
     setDataLoaded(true);
   }, []);
 
@@ -397,16 +432,23 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
 
     // Check password if room has one and player data is loaded
     if (roomPassword) {
-      const isValid = checkPasswordValidity();
+      const isValid = checkPasswordValidity(roomPassword);
       setPasswordValidated(isValid);
-      
+
       if (!isValid) {
         router.push(`/join/${roomCode}`);
       }
     } else {
       setPasswordValidated(true);
     }
-  }, [dataLoaded, isLoading, shouldRedirectToJoin, roomPassword, checkPasswordValidity, roomCode, router]);
+  }, [
+    dataLoaded,
+    isLoading,
+    shouldRedirectToJoin,
+    roomPassword,
+    roomPassword,
+    router,
+  ]);
 
   // Handle window resize
   useEffect(() => {
@@ -430,35 +472,104 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     [isHost, setGameSettings]
   );
 
-  const handleKickPlayer = useCallback(
-    (playerId: number) => {
-      if (!isHost) return;
+   const handleKickPlayer = useCallback(async (playerId: number) => {
+    if (!isHost) return;
+    
+    try {
+      // Send a kick notification to the player's personal channel
+      const channel = supabase.channel(`player:${playerId}`);
+      await channel.send({
+        type: 'broadcast',
+        event: 'kicked',
+        payload: { roomCode }
+      });
+      
+      // Remove player from local state
       setPlayers((prev) => prev.filter((player) => player.id !== playerId));
-    },
-    [isHost, setPlayers]
-  );
+    } catch (error) {
+      console.error("Error kicking player:", error);
+    }
+  }, [isHost, roomCode, setPlayers]);
+
+  // Add useEffect to handle kick notifications for the current player
+  useEffect(() => {
+    if (!playerData?.player?.id || !isPlayerVerified) return;
+
+    // Subscribe to personal channel for kick notifications
+    const personalChannel = supabase.channel(`player:${playerData.player.id}`);
+    
+    personalChannel
+      .on('broadcast', { event: 'kicked' }, (payload) => {
+        if (payload.payload.roomCode === roomCode) {
+          // Show notification and redirect to home
+          alert("You have been kicked from the room by the host.");
+          router.push("/?message=kicked");
+        }
+      })
+      .subscribe();
+
+    return () => {
+      personalChannel.unsubscribe();
+    };
+  }, [playerData, roomCode, router, isPlayerVerified]);
 
   const handleStartGame = useCallback(async () => {
     if (!canStartGame) return;
 
-    await saveRoomData(gameSettings, selectedGameMode);
+    try {
+      // 1. Save room data to database first
+      await saveRoomData(gameSettings, selectedGameMode);
 
-    const gameConfig: GameConfig = {
-      gameSettings,
-      selectedGameMode,
-      players,
-      roomCode,
-    };
+      // 2. Create and save game config
+      const gameConfig: GameConfig = {
+        gameSettings,
+        selectedGameMode,
+        players,
+        roomCode,
+      };
 
-    saveGameConfig(roomCode, gameConfig);
-    router.push(`/play/${roomCode}`);
+      saveGameConfig(roomCode, gameConfig);
+
+      // 3. Update room status to "playing" in database
+      await supabase.from("room").update({
+        status: "playing",
+        game_started_at: new Date().toISOString()
+      }).eq("room_code", roomCode);
+
+      // 4. Wait a bit to ensure database is updated
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // 5. Broadcast game start event to all players
+      const channel = supabase.channel(`room:${roomCode}`);
+      await channel.send({
+        type: 'broadcast',
+        event: 'game_start',
+        payload: { 
+          roomCode,
+          gameConfig: {
+            gameSettings,
+            selectedGameMode,
+            players,
+          }
+        }
+      });
+      
+      // 6. Wait a bit more to ensure broadcast is sent
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // 7. Navigate host to game page
+      window.location.href = `/play/${roomCode}`;
+    } catch (error) {
+      console.error("Error starting game:", error);
+      // Show error message to user
+      alert("Failed to start game. Please try again.");
+    }
   }, [
     canStartGame,
     players,
     gameSettings,
     selectedGameMode,
     roomCode,
-    router,
     saveRoomData,
   ]);
 
@@ -481,8 +592,8 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     router.push("/");
   }, [isHost, roomCode, router]);
 
-  // Don't render the lobby until data is loaded and password is validated (if required)
-  if (!dataLoaded || isLoading) {
+  // Don't render the lobby until data is loaded and verified
+  if (!dataLoaded || isLoading || !isPlayerVerified) {
     return (
       <div className="min-h-screen flex items-center justify-center text-white">
         <div className="flex items-center">
@@ -493,24 +604,13 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           >
             <FaSync />
           </motion.div>
-          <span>Loading...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (roomPassword && !passwordValidated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-white">
-        <div className="flex items-center">
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            className="text-2xl mr-3"
-          >
-            <FaSync />
-          </motion.div>
-          <span>Verifying access...</span>
+          <span>
+            {!dataLoaded 
+              ? "Loading..." 
+              : !isPlayerVerified 
+                ? "Verifying access..." 
+                : "Loading room..."}
+          </span>
         </div>
       </div>
     );
@@ -662,7 +762,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           <div className="relative z-10 flex items-center space-x-4">
             {!isHost ? (
               <FaLock className="text-2xl" />
-            ) : isLoading ? (
+            ) : isLoading || !isPlayerVerified ? (
               <motion.div
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
@@ -684,6 +784,8 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             <span>
               {!isHost
                 ? "Only Host Can Start"
+                : !isPlayerVerified
+                ? "Verifying..."
                 : isLoading
                 ? t.loading
                 : playerCount < 1
@@ -920,7 +1022,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           >
             Quiz Attack
           </motion.h1>
-          <div className="flex  items-center gap-4 justify-center mt-2 space-y-2">
+          <div className="flex items-center gap-4 justify-center mt-2">
             <div className="flex items-center justify-center space-x-3">
               <span className="text-sm text-white/70 font-medium">
                 {t.room}:

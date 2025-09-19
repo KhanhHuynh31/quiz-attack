@@ -55,7 +55,7 @@ const PlayerList: React.FC<PlayerListProps> = ({
                     <FaCheck className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 text-white rounded-full p-0.5" />
                   )}
                 </div>
-                <span className="font-medium text-white">{player.name}</span>
+                <span className="font-medium text-white">{player.nickname}</span>
               </div>
               <div className="flex items-center">
                 <span className="text-white/70 mr-3">{player.cards} cards</span>

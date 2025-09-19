@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaCrown, FaUserCheck, FaUserClock, FaUserTimes } from "react-icons/fa";
+import { FaCrown, FaUserTimes } from "react-icons/fa";
 import { useI18n } from "@/hooks/useI18n";
 import { lobbyTranslations } from "@/i18n/translations";
 import { Player } from "@/types/type";
@@ -14,7 +14,7 @@ interface PlayerCardProps {
   showKickButton: boolean;
 }
 
-const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index }) => {
+const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index, showKickButton }) => {
   const [isHovered, setIsHovered] = useState(false);
   const { language } = useI18n();
   const t =
@@ -180,7 +180,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index }) => {
           transition={{ duration: 2, repeat: Infinity }}
         />
         {/* Kick button with enhanced animation */}
-        {!player.isHost && (
+        {showKickButton && !player.isHost && (
           <AnimatePresence>
             {isHovered && (
               <motion.button

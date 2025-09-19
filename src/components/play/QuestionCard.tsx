@@ -20,6 +20,7 @@ interface QuestionCardProps {
   players: Player[];
   scoreUpdates: ScoreUpdate[];
   gameModifiers: GameModifiers;
+  allPlayersAnswered: boolean;
 }
 
 const QuestionCard: React.FC<QuestionCardProps> = ({
@@ -33,6 +34,7 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
   handleAnswerSelect,
   players,
   scoreUpdates,
+
 }) => {
   const renderPlayers = () => {
     const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
@@ -60,7 +62,7 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
                 <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white mr-3">
                   {index === 0 ? "👑" : "👤"}
                 </div>
-                <span className="font-medium text-white">{player.name}</span>
+                <span className="font-medium text-white">{player.nickname}</span>
               </div>
               <div className="flex items-center">
                 <span className="text-white/70 mr-3">{player.cards} cards</span>
