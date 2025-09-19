@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import { motion } from "framer-motion";
 import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
 import { useParams, useRouter } from "next/navigation";
@@ -55,7 +61,8 @@ const QuizGame = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [pausedBy, setPausedBy] = useState<string>("");
   const [activeCards, setActiveCards] = useState<ActiveCard[]>([]);
-  const [showLeaderboardAfterAnswer, setShowLeaderboardAfterAnswer] = useState(false);
+  const [showLeaderboardAfterAnswer, setShowLeaderboardAfterAnswer] =
+    useState(false);
   const [usedCardsLog, setUsedCardsLog] = useState<CardUsage[]>([]);
   const [isDrawingCard, setIsDrawingCard] = useState(false);
   const [drawnCard, setDrawnCard] = useState<Card | null>(null);
@@ -116,12 +123,15 @@ const QuizGame = () => {
         color: card.color,
         emoji: card.emoji,
         type: card.type,
-        uniqueId: card.uniqueId || `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        uniqueId:
+          card.uniqueId ||
+          `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       })),
     []
   );
 
-  const maxQuestions = config?.gameSettings.numberOfQuestion || questions.length;
+  const maxQuestions =
+    config?.gameSettings.numberOfQuestion || questions.length;
   const currentQuestion = questions[currentQuestionIndex];
 
   const canPlayCards = useMemo(() => {
@@ -133,7 +143,14 @@ const QuizGame = () => {
       !gameOver &&
       timeLeft > 0
     );
-  }, [isAnswered, showCorrectAnswer, showLeaderboardAfterAnswer, isPaused, gameOver, timeLeft]);
+  }, [
+    isAnswered,
+    showCorrectAnswer,
+    showLeaderboardAfterAnswer,
+    isPaused,
+    gameOver,
+    timeLeft,
+  ]);
 
   const redirectToHome = useCallback(() => {
     setTimeout(() => router.push("/"), 2000);
@@ -148,10 +165,80 @@ const QuizGame = () => {
     [redirectToHome]
   );
 
+  // FIXED: Save player scores to database
+  const savePlayerScoresToDatabase = useCallback(
+    async (playersData: Player[]) => {
+      if (!isHost) return;
+
+      try {
+        // Convert players data to JSON strings for storage
+        const playerList = playersData.map((player) =>
+          JSON.stringify({
+            id: player.id,
+            nickname: player.nickname,
+            avatar: player.avatar,
+            score: player.score,
+            cards: player.cards,
+            isHost: player.isHost || false,
+          })
+        );
+
+        await supabase
+          .from("room")
+          .update({ player_list: playerList })
+          .eq("room_code", roomCode);
+
+        console.log("Player scores saved to database:", playerList);
+      } catch (error) {
+        console.error("Error saving player scores:", error);
+      }
+    },
+    [isHost, roomCode]
+  );
+
+  // FIXED: Load player scores from database
+  const loadPlayerScoresFromDatabase = useCallback(async () => {
+    try {
+      const { data: roomData, error } = await supabase
+        .from("room")
+        .select("player_list")
+        .eq("room_code", roomCode)
+        .single();
+
+      if (error || !roomData?.player_list) {
+        console.log("No saved player scores found");
+        return {};
+      }
+
+      const playerScores: { [key: number]: { score: number; cards: number } } =
+        {};
+
+      roomData.player_list.forEach((playerJson: string) => {
+        try {
+          const playerData = JSON.parse(playerJson);
+          playerScores[playerData.id] = {
+            score: playerData.score || 0,
+            cards: playerData.cards || 0,
+          };
+        } catch (parseError) {
+          console.error("Error parsing player data:", parseError);
+        }
+      });
+
+      console.log("Loaded player scores from database:", playerScores);
+      return playerScores;
+    } catch (error) {
+      console.error("Error loading player scores:", error);
+      return {};
+    }
+  }, [roomCode]);
+
   // Check if all players have answered
   useEffect(() => {
     if (players.length > 0) {
-      const answeredCount = players.filter(player => player.hasAnswered).length;
+      const answeredCount = players.filter(
+        (player) => player.hasAnswered
+      ).length;
       const newAllPlayersAnswered = answeredCount === players.length;
       setAllPlayersAnswered(newAllPlayersAnswered);
     }
@@ -164,7 +251,11 @@ const QuizGame = () => {
 
       // Load player data from localStorage
       const localPlayerData = loadPlayerData();
-      if (!localPlayerData || !localPlayerData.player.nickname || !localPlayerData.player.avatar) {
+      if (
+        !localPlayerData ||
+        !localPlayerData.player.nickname ||
+        !localPlayerData.player.avatar
+      ) {
         showError("Player data not found. Redirecting to join page...");
         router.push(`/join/${roomCode}`);
         return;
@@ -203,7 +294,7 @@ const QuizGame = () => {
       }
 
       // Check if game is still active
-      if (roomData.room_status === 'finished') {
+      if (roomData.room_status === "finished") {
         showError("Game has ended");
         return;
       }
@@ -220,9 +311,10 @@ const QuizGame = () => {
         DEFAULT_QUIZ_PACKS[0];
 
       // Load game mode
-      const selectedGameMode = GAME_MODES.find(
-        (mode: GameMode) => mode.id === roomData.game_mode
-      ) || GAME_MODES[0] || null;
+      const selectedGameMode =
+        GAME_MODES.find((mode: GameMode) => mode.id === roomData.game_mode) ||
+        GAME_MODES[0] ||
+        null;
 
       // Load questions for the quiz pack
       const { data: questionsData, error: questionsError } = await supabase
@@ -259,7 +351,9 @@ const QuizGame = () => {
       setCurrentQuestionIndex(roomData.current_question_index || 0);
       setIsPaused(roomData.is_paused || false);
       setGameOver(roomData.game_over || false);
-      setTimeLeft(roomData.current_time_left || parsedSettings.timePerQuestion || 30);
+      setTimeLeft(
+        roomData.current_time_left || parsedSettings.timePerQuestion || 30
+      );
 
       setLoading(false);
     } catch (err) {
@@ -269,22 +363,25 @@ const QuizGame = () => {
   }, [roomCode, showError, router]);
 
   // Broadcast timer updates to all players (host only)
-  const broadcastTimeUpdate = useCallback(async (time: number) => {
-    if (!channelRef.current || !isHost) return;
+  const broadcastTimeUpdate = useCallback(
+    async (time: number) => {
+      if (!channelRef.current || !isHost) return;
 
-    try {
-      await channelRef.current.send({
-        type: 'broadcast',
-        event: 'timer_update',
-        payload: {
-          roomCode,
-          timeLeft: time,
-        }
-      });
-    } catch (error) {
-      console.error("Error broadcasting time update:", error);
-    }
-  }, [roomCode, isHost]);
+      try {
+        await channelRef.current.send({
+          type: "broadcast",
+          event: "timer_update",
+          payload: {
+            roomCode,
+            timeLeft: time,
+          },
+        });
+      } catch (error) {
+        console.error("Error broadcasting time update:", error);
+      }
+    },
+    [roomCode, isHost]
+  );
 
   // Update game state in database (host only)
   const updateGameState = useCallback(
@@ -303,12 +400,12 @@ const QuizGame = () => {
 
         // Broadcast to all players
         await channelRef.current.send({
-          type: 'broadcast',
-          event: 'game_state_update',
+          type: "broadcast",
+          event: "game_state_update",
           payload: {
             roomCode,
             ...updates,
-          }
+          },
         });
       } catch (error) {
         console.error("Error updating game state:", error);
@@ -318,47 +415,89 @@ const QuizGame = () => {
   );
 
   // Setup realtime subscriptions for players
-  const setupRealtimeSubscriptions = useCallback(() => {
+  const setupRealtimeSubscriptions = useCallback(async () => {
     if (!roomCode || !playerData?.player?.id) return;
+
+    // FIXED: Load saved player scores first
+    const savedScores = await loadPlayerScoresFromDatabase();
 
     const channel = supabase.channel(`room:${roomCode}`);
 
     const updatePlayers = () => {
       const state = channel.presenceState();
       const playerMap = new Map<number, Player>();
-      
+
       for (const key in state) {
         const presences = state[key] as PlayerPresence[];
         if (presences[0]) {
           const { presence_ref, ...player } = presences[0];
+
+          // FIXED: Use saved scores if available
+          const savedPlayerData = savedScores[player.id];
+
           playerMap.set(player.id, {
             ...player,
             hasAnswered: player.hasAnswered || false,
             selectedAnswer: player.selectedAnswer || undefined,
+            score: savedPlayerData?.score ?? player.score ?? 0,
+            cards: savedPlayerData?.cards ?? player.cards ?? 0,
           });
         }
       }
-      
-      setPlayers(Array.from(playerMap.values()));
+
+      const updatedPlayers = Array.from(playerMap.values());
+      setPlayers(updatedPlayers);
+
+      // FIXED: Save scores whenever players are updated
+      if (isHost && updatedPlayers.length > 0) {
+        savePlayerScoresToDatabase(updatedPlayers);
+      }
     };
 
     channel
       .on("presence", { event: "sync" }, updatePlayers)
       .on("presence", { event: "join" }, ({ newPresences }) => {
-        const { presence_ref, ...newPlayer } = newPresences[0] as PlayerPresence;
+        const { presence_ref, ...newPlayer } =
+          newPresences[0] as PlayerPresence;
+
         setPlayers((prev) => {
           if (prev.some((p) => p.id === newPlayer.id)) return prev;
-          return [...prev, {
+
+          // FIXED: Use saved scores for new player if available
+          const savedPlayerData = savedScores[newPlayer.id];
+          const playerWithScores = {
             ...newPlayer,
             hasAnswered: newPlayer.hasAnswered || false,
             selectedAnswer: newPlayer.selectedAnswer || undefined,
-          }];
+            score: savedPlayerData?.score ?? newPlayer.score ?? 0,
+            cards: savedPlayerData?.cards ?? newPlayer.cards ?? 0,
+          };
+
+          const updatedPlayers = [...prev, playerWithScores];
+
+          // Save to database
+          if (isHost) {
+            savePlayerScoresToDatabase(updatedPlayers);
+          }
+
+          return updatedPlayers;
         });
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
-        const { presence_ref, ...leftPlayer } = leftPresences[0] as PlayerPresence;
-        setPlayers((prev) => prev.filter((p) => p.id !== leftPlayer.id));
-        
+        const { presence_ref, ...leftPlayer } =
+          leftPresences[0] as PlayerPresence;
+
+        setPlayers((prev) => {
+          const updatedPlayers = prev.filter((p) => p.id !== leftPlayer.id);
+
+          // Save to database
+          if (isHost && updatedPlayers.length > 0) {
+            savePlayerScoresToDatabase(updatedPlayers);
+          }
+
+          return updatedPlayers;
+        });
+
         // If host left, mark room as closed
         if (leftPlayer.isHost) {
           setRoomClosed(true);
@@ -367,20 +506,20 @@ const QuizGame = () => {
       // Listen for game state updates
       .on("broadcast", { event: "game_state_update" }, ({ payload }) => {
         if (payload.roomCode === roomCode) {
-          if (payload.currentQuestionIndex !== undefined) {
-            setCurrentQuestionIndex(payload.currentQuestionIndex);
+          if (payload.current_question_index !== undefined) {
+            setCurrentQuestionIndex(payload.current_question_index);
           }
-          if (payload.isPaused !== undefined) {
-            setIsPaused(payload.isPaused);
+          if (payload.is_paused !== undefined) {
+            setIsPaused(payload.is_paused);
             if (payload.pausedBy) {
               setPausedBy(payload.pausedBy);
             }
           }
-          if (payload.gameOver !== undefined) {
-            setGameOver(payload.gameOver);
+          if (payload.game_over !== undefined) {
+            setGameOver(payload.game_over);
           }
-          if (payload.timeLeft !== undefined) {
-            setTimeLeft(payload.timeLeft);
+          if (payload.current_time_left !== undefined) {
+            setTimeLeft(payload.current_time_left);
           }
         }
       })
@@ -393,23 +532,36 @@ const QuizGame = () => {
       // Listen for player answer updates
       .on("broadcast", { event: "player_answer" }, ({ payload }) => {
         if (payload.roomCode === roomCode) {
-          setPlayers((prev) =>
-            prev.map((player) =>
+          setPlayers((prev) => {
+            const updatedPlayers = prev.map((player) =>
               player.id === payload.playerId
                 ? {
                     ...player,
                     hasAnswered: true,
                     selectedAnswer: payload.selectedAnswer,
-                    score: payload.score || player.score,
+                    // FIXED: Add score properly without overwriting existing scores
+                    score: payload.scoreChange
+                      ? player.score + payload.scoreChange
+                      : player.score,
                   }
                 : player
-            )
-          );
+            );
+
+            // Save to database
+            if (isHost) {
+              savePlayerScoresToDatabase(updatedPlayers);
+            }
+
+            return updatedPlayers;
+          });
         }
       })
       // Listen for card usage
       .on("broadcast", { event: "card_used" }, ({ payload }) => {
-        if (payload.roomCode === roomCode && payload.playerId !== playerData.player.id) {
+        if (
+          payload.roomCode === roomCode &&
+          payload.playerId !== playerData.player.id
+        ) {
           // Show card usage animation for other players
           setUsedCardsLog((prev) => [
             ...prev,
@@ -425,14 +577,16 @@ const QuizGame = () => {
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          // Track current player presence
+          // FIXED: Track current player presence with saved scores
+          const savedPlayerData = savedScores[playerData.player.id];
+
           await channel.track({
             id: playerData.player.id,
             nickname: playerData.player.nickname,
             avatar: playerData.player.avatar,
             isHost: playerData.player.isHost,
-            score: playerData.player.score || 0,
-            cards: playerData.player.cards || 0,
+            score: savedPlayerData?.score ?? playerData.player.score ?? 0,
+            cards: savedPlayerData?.cards ?? playerData.player.cards ?? 0,
             hasAnswered: false,
             selectedAnswer: undefined,
           });
@@ -444,7 +598,7 @@ const QuizGame = () => {
     // Also listen for kick notifications on personal channel
     const personalChannel = supabase.channel(`player:${playerData.player.id}`);
     personalChannel
-      .on('broadcast', { event: 'kicked' }, (payload) => {
+      .on("broadcast", { event: "kicked" }, (payload) => {
         if (payload.payload.roomCode === roomCode) {
           alert("You have been kicked from the room by the host.");
           router.push("/?message=kicked");
@@ -456,7 +610,15 @@ const QuizGame = () => {
       channel.unsubscribe();
       personalChannel.unsubscribe();
     };
-  }, [roomCode, playerData, currentQuestionIndex, router]);
+  }, [
+    roomCode,
+    playerData,
+    currentQuestionIndex,
+    router,
+    loadPlayerScoresFromDatabase,
+    savePlayerScoresToDatabase,
+    isHost,
+  ]);
 
   // Update player score in database
   const updatePlayerScore = useCallback(
@@ -464,21 +626,37 @@ const QuizGame = () => {
       if (!channelRef.current) return;
 
       try {
-        // Broadcast score update to all players
+        // FIXED: Update player score directly in state first
+        setPlayers((prev) => {
+          const updatedPlayers = prev.map((player) =>
+            player.id === playerId
+              ? { ...player, score: player.score + scoreChange }
+              : player
+          );
+
+          // Save to database
+          if (isHost) {
+            savePlayerScoresToDatabase(updatedPlayers);
+          }
+
+          return updatedPlayers;
+        });
+
+        // Broadcast score change to other players
         await channelRef.current.send({
-          type: 'broadcast',
-          event: 'player_answer',
+          type: "broadcast",
+          event: "player_answer",
           payload: {
             roomCode,
             playerId,
-            score: scoreChange,
-          }
+            scoreChange,
+          },
         });
       } catch (error) {
         console.error("Error updating player score:", error);
       }
     },
-    [roomCode]
+    [roomCode, isHost, savePlayerScoresToDatabase]
   );
 
   // Broadcast card usage to other players
@@ -488,15 +666,15 @@ const QuizGame = () => {
 
       try {
         await channelRef.current.send({
-          type: 'broadcast',
-          event: 'card_used',
+          type: "broadcast",
+          event: "card_used",
           payload: {
             roomCode,
             playerId: playerData.player.id,
             playerName: playerData.player.nickname,
             cardName: card.name,
             cardDescription: card.description,
-          }
+          },
         });
       } catch (error) {
         console.error("Error broadcasting card usage:", error);
@@ -512,15 +690,34 @@ const QuizGame = () => {
 
   // Setup realtime subscriptions after data is loaded
   useEffect(() => {
+    let cleanupFn: (() => void) | undefined;
+
     if (!loading && !error && playerData) {
-      const cleanup = setupRealtimeSubscriptions();
-      return cleanup;
+      (async () => {
+        try {
+          cleanupFn = await setupRealtimeSubscriptions();
+        } catch (err) {
+          console.error("Error setting up realtime subscriptions:", err);
+        }
+      })();
     }
+
+    return () => {
+      if (typeof cleanupFn === "function") {
+        try {
+          cleanupFn();
+        } catch (err) {
+          console.error("Error during realtime cleanup:", err);
+        }
+      }
+    };
   }, [loading, error, playerData, setupRealtimeSubscriptions]);
 
   const applyCardEffect = useCallback(
     (card: Card, cardData: Card) => {
-      const effectId = `effect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const effectId = `effect-${Date.now()}-${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
       const effect = cardData.effect;
       const currentTime = Date.now();
 
@@ -566,7 +763,9 @@ const QuizGame = () => {
             setActiveEffects((prev) => prev.filter((e) => e.id !== effectId));
             setGameModifiers((prev) => ({
               ...prev,
-              cssEffects: prev.cssEffects.filter((css) => css !== effect.effect),
+              cssEffects: prev.cssEffects.filter(
+                (css) => css !== effect.effect
+              ),
             }));
           }, 5000);
 
@@ -575,20 +774,31 @@ const QuizGame = () => {
 
         case "score":
           if (effect.value === -50) {
-            setPlayers((prev) =>
-              prev.map((player) => {
+            setPlayers((prev) => {
+              const updatedPlayers = prev.map((player) => {
                 if (player.id === currentPlayerId) {
                   return { ...player, score: Math.max(0, player.score + 50) };
                 } else if (player.id !== currentPlayerId) {
                   return { ...player, score: Math.max(0, player.score - 50) };
                 }
                 return player;
-              })
-            );
+              });
+
+              // Save to database
+              if (isHost) {
+                savePlayerScoresToDatabase(updatedPlayers);
+              }
+
+              return updatedPlayers;
+            });
 
             setScoreUpdates((prev) => [
               ...prev,
-              { playerId: currentPlayerId!, points: 50, animationId: `steal-gain-${effectId}` },
+              {
+                playerId: currentPlayerId!,
+                points: 50,
+                animationId: `steal-gain-${effectId}`,
+              },
             ]);
           } else {
             const scoreEffect: ActiveCardEffect = {
@@ -659,7 +869,14 @@ const QuizGame = () => {
           console.warn(`Unknown effect type: ${effect.type}`);
       }
     },
-    [currentQuestion, gameModifiers.lockedAnswers, currentPlayerId, isHost, broadcastTimeUpdate]
+    [
+      currentQuestion,
+      gameModifiers.lockedAnswers,
+      currentPlayerId,
+      isHost,
+      broadcastTimeUpdate,
+      savePlayerScoresToDatabase,
+    ]
   );
 
   const clearQuestionEffects = useCallback(() => {
@@ -682,21 +899,29 @@ const QuizGame = () => {
   }, [currentQuestionIndex, clearQuestionEffects]);
 
   useEffect(() => {
-    if (config && currentQuestionIndex + 1 >= config.gameSettings.numberOfQuestion) {
+    if (
+      config &&
+      currentQuestionIndex + 1 >= config.gameSettings.numberOfQuestion
+    ) {
       if (showLeaderboardAfterAnswer) {
         const gameOverTimer = setTimeout(() => {
           setGameOver(true);
-          updateGameState({ game_over: true, room_status: 'finished' });
+          updateGameState({ game_over: true, room_status: "finished" });
         }, 5000);
         return () => clearTimeout(gameOverTimer);
       }
     }
-  }, [currentQuestionIndex, config, showLeaderboardAfterAnswer, updateGameState]);
+  }, [
+    currentQuestionIndex,
+    config,
+    showLeaderboardAfterAnswer,
+    updateGameState,
+  ]);
 
   const goToNextQuestion = useCallback(() => {
     if (gameOver || currentQuestionIndex + 1 >= maxQuestions) {
       setGameOver(true);
-      updateGameState({ game_over: true, room_status: 'finished' });
+      updateGameState({ game_over: true, room_status: "finished" });
       return;
     }
 
@@ -710,53 +935,80 @@ const QuizGame = () => {
     setRoundScore(0);
     setAllPlayersAnswered(false);
 
-    // Reset player answer states but keep scores
-    setPlayers((prev) =>
-      prev.map((player) => ({
+    // FIXED: Only reset answer states, preserve scores and cards
+    setPlayers((prev) => {
+      const updatedPlayers = prev.map((player) => ({
         ...player,
         hasAnswered: false,
         selectedAnswer: undefined,
-      }))
-    );
+        // Keep existing score and cards - DON'T reset them
+      }));
+
+      // Save preserved scores to database
+      if (isHost) {
+        savePlayerScoresToDatabase(updatedPlayers);
+      }
+
+      return updatedPlayers;
+    });
 
     if (isHost) {
-      updateGameState({ 
+      updateGameState({
         current_question_index: nextQuestionIndex,
-        current_time_left: newTime 
+        current_time_left: newTime,
       });
       broadcastTimeUpdate(newTime);
     }
 
     clearQuestionEffects();
-  }, [currentQuestionIndex, maxQuestions, config, gameOver, clearQuestionEffects, isHost, updateGameState, broadcastTimeUpdate]);
+  }, [
+    currentQuestionIndex,
+    maxQuestions,
+    config,
+    gameOver,
+    clearQuestionEffects,
+    isHost,
+    updateGameState,
+    broadcastTimeUpdate,
+    savePlayerScoresToDatabase,
+  ]);
 
   const handleAnswerSelect = useCallback(
     async (optionIndex: number) => {
-      if (isAnswered || !currentQuestion || gameOver || !currentPlayerId) return;
+      if (isAnswered || !currentQuestion || gameOver || !currentPlayerId)
+        return;
 
       setSelectedAnswer(optionIndex);
       setIsAnswered(true);
       setShowCorrectAnswer(true);
 
       // Update local player state
-      setPlayers((prevPlayers) =>
-        prevPlayers.map((player) =>
+      setPlayers((prevPlayers) => {
+        const updatedPlayers = prevPlayers.map((player) =>
           player.id === currentPlayerId
             ? { ...player, hasAnswered: true, selectedAnswer: optionIndex }
             : player
-        )
-      );
+        );
+
+        // Save to database
+        if (isHost) {
+          savePlayerScoresToDatabase(updatedPlayers);
+        }
+
+        return updatedPlayers;
+      });
 
       // Broadcast answer to other players
       if (channelRef.current) {
         await channelRef.current.send({
-          type: 'broadcast',
-          event: 'player_answer',
+          type: "broadcast",
+          event: "player_answer",
           payload: {
             roomCode,
             playerId: currentPlayerId,
             selectedAnswer: optionIndex,
-          }
+            scoreChange: 0, // Will be updated later if correct
+          },
         });
       }
 
@@ -771,10 +1023,13 @@ const QuizGame = () => {
         updatePlayerScore(currentPlayerId, earnedScore);
 
         // Draw a card if game mode allows it
-        if (config?.selectedGameMode && config.selectedGameMode.id === 1) { // Assuming mode 1 has cards
+        if (config?.selectedGameMode && config.selectedGameMode.id === 1) {
+          // Assuming mode 1 has cards
           const randomCard: Card = {
             ...allCards[Math.floor(Math.random() * allCards.length)],
-            uniqueId: `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            uniqueId: `card-${Date.now()}-${Math.random()
+              .toString(36)
+              .substr(2, 9)}`,
           };
 
           setDrawnCard(randomCard);
@@ -784,17 +1039,23 @@ const QuizGame = () => {
             setCurrentPlayerHand((prev) => [...prev, randomCard]);
             setIsDrawingCard(false);
             setDrawnCard(null);
-            setPlayers((prev) =>
-              prev.map((player) =>
-                player.id === currentPlayerId ? { ...player, cards: player.cards + 1 } : player
-              )
-            );
+            setPlayers((prev) => {
+              const updatedPlayers = prev.map((player) =>
+                player.id === currentPlayerId
+                  ? { ...player, cards: player.cards + 1 }
+                  : player
+              );
+
+              // Save to database
+              if (isHost) {
+                savePlayerScoresToDatabase(updatedPlayers);
+              }
+
+              return updatedPlayers;
+            });
           }, 1500);
         }
       }
-
-      // Only show score updates when all players have answered or time runs out
-      // This will be handled in a separate useEffect
     },
     [
       isAnswered,
@@ -806,17 +1067,19 @@ const QuizGame = () => {
       updatePlayerScore,
       roomCode,
       config,
+      isHost,
+      savePlayerScoresToDatabase,
     ]
   );
 
   // EMERGENCY BACKUP: Force transition if stuck on leaderboard too long
   useEffect(() => {
     let emergencyTimeout: NodeJS.Timeout | null = null;
-    
+
     if (showLeaderboardAfterAnswer && !gameOver) {
-      console.log('Emergency backup timer started (10s)...');
+      console.log("Emergency backup timer started (10s)...");
       emergencyTimeout = setTimeout(() => {
-        console.log('EMERGENCY: Forcing transition from leaderboard!');
+        console.log("EMERGENCY: Forcing transition from leaderboard!");
         setShowLeaderboardAfterAnswer(false);
         setScoreUpdates([]);
         goToNextQuestion();
@@ -832,14 +1095,14 @@ const QuizGame = () => {
 
   // SIMPLIFIED: Show leaderboard when all players have answered or time runs out
   useEffect(() => {
-    console.log('Leaderboard effect triggered:', {
+    console.log("Leaderboard effect triggered:", {
       allPlayersAnswered,
       timeLeft,
       isAnswered,
       showLeaderboardAfterAnswer,
       showCorrectAnswer,
       gameOver,
-      isPaused
+      isPaused,
     });
 
     // Clear any existing timers to prevent conflicts
@@ -853,28 +1116,26 @@ const QuizGame = () => {
     }
 
     // Simplified condition: if all answered OR time is 0, and someone answered
-    const readyForLeaderboard = (allPlayersAnswered || timeLeft === 0) && 
-                               isAnswered && 
-                               !gameOver && 
-                               !isPaused;
+    const readyForLeaderboard =
+      (allPlayersAnswered || timeLeft === 0) &&
+      isAnswered &&
+      !gameOver &&
+      !isPaused;
 
-    if (readyForLeaderboard && showCorrectAnswer && !showLeaderboardAfterAnswer) {
-      console.log('Starting answer phase timer (2s)...');
-      
+    if (
+      readyForLeaderboard &&
+      showCorrectAnswer &&
+      !showLeaderboardAfterAnswer
+    ) {
+      console.log("Starting answer phase timer (2s)...");
+
       answerPhaseTimerRef.current = setTimeout(() => {
-        console.log('Moving to leaderboard...');
+        console.log("Moving to leaderboard...");
         setShowCorrectAnswer(false);
         setShowLeaderboardAfterAnswer(true);
-
-        // Add score updates if player earned points
-        if (roundScore > 0 && currentPlayerId) {
-          const animationId = `score-${Date.now()}`;
-          setScoreUpdates([{ playerId: currentPlayerId, points: roundScore, animationId }]);
-        }
-
         // Force move to next question after 4 seconds
         leaderboardTimerRef.current = setTimeout(() => {
-          console.log('Forcing move to next question...');
+          console.log("Forcing move to next question...");
           setShowLeaderboardAfterAnswer(false);
           setScoreUpdates([]);
           goToNextQuestion();
@@ -892,7 +1153,18 @@ const QuizGame = () => {
         leaderboardTimerRef.current = null;
       }
     };
-  }, [allPlayersAnswered, timeLeft, isAnswered, showLeaderboardAfterAnswer, showCorrectAnswer, gameOver, isPaused, roundScore, currentPlayerId, goToNextQuestion]);
+  }, [
+    allPlayersAnswered,
+    timeLeft,
+    isAnswered,
+    showLeaderboardAfterAnswer,
+    showCorrectAnswer,
+    gameOver,
+    isPaused,
+    roundScore,
+    currentPlayerId,
+    goToNextQuestion,
+  ]);
 
   const togglePause = useCallback(async () => {
     if (gameOver) return;
@@ -906,11 +1178,19 @@ const QuizGame = () => {
 
     if (isHost) {
       await updateGameState({ is_paused: newPausedState });
-      
+
       // Broadcast current time when pausing/resuming
       broadcastTimeUpdate(timeLeft);
     }
-  }, [isPaused, playerData, gameOver, isHost, updateGameState, timeLeft, broadcastTimeUpdate]);
+  }, [
+    isPaused,
+    playerData,
+    gameOver,
+    isHost,
+    updateGameState,
+    timeLeft,
+    broadcastTimeUpdate,
+  ]);
 
   const useCard = useCallback(
     async (card: Card) => {
@@ -928,7 +1208,9 @@ const QuizGame = () => {
         return;
       }
 
-      const animationId = `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const animationId = `card-${Date.now()}-${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
 
       // Apply card effect
       applyCardEffect(card, cardData);
@@ -945,13 +1227,25 @@ const QuizGame = () => {
         },
       ]);
 
-      // Remove card from hand
-      setCurrentPlayerHand((prev) => prev.filter((c) => c.uniqueId !== card.uniqueId));
-      setPlayers((prevPlayers) =>
-        prevPlayers.map((player) =>
-          player.id === currentPlayerId ? { ...player, cards: player.cards - 1 } : player
-        )
+      // Remove card from hand and update player's card count
+      setCurrentPlayerHand((prev) =>
+        prev.filter((c) => c.uniqueId !== card.uniqueId)
       );
+
+      setPlayers((prevPlayers) => {
+        const updatedPlayers = prevPlayers.map((player) =>
+          player.id === currentPlayerId
+            ? { ...player, cards: player.cards - 1 }
+            : player
+        );
+
+        // Save to database
+        if (isHost) {
+          savePlayerScoresToDatabase(updatedPlayers);
+        }
+
+        return updatedPlayers;
+      });
 
       // Broadcast card usage to other players
       await broadcastCardUsage(card);
@@ -969,6 +1263,8 @@ const QuizGame = () => {
       applyCardEffect,
       currentPlayerId,
       broadcastCardUsage,
+      isHost,
+      savePlayerScoresToDatabase,
     ]
   );
 
@@ -1006,15 +1302,20 @@ const QuizGame = () => {
     setAllPlayersAnswered(false);
 
     // Reset players scores and answer states
-    setPlayers((prev) =>
-      prev.map((player) => ({
+    setPlayers((prev) => {
+      const resetPlayers = prev.map((player) => ({
         ...player,
         score: 0,
         cards: 0,
         hasAnswered: false,
         selectedAnswer: undefined,
-      }))
-    );
+      }));
+
+      // Save reset scores to database
+      savePlayerScoresToDatabase(resetPlayers);
+
+      return resetPlayers;
+    });
 
     // Update database
     try {
@@ -1025,28 +1326,35 @@ const QuizGame = () => {
           current_time_left: initialTime,
           is_paused: false,
           game_over: false,
-          room_status: 'playing',
+          room_status: "playing",
+          player_list: [], // Clear saved scores
         })
         .eq("room_code", roomCode);
 
       // Broadcast restart to all players
       if (channelRef.current) {
         await channelRef.current.send({
-          type: 'broadcast',
-          event: 'game_state_update',
+          type: "broadcast",
+          event: "game_state_update",
           payload: {
             roomCode,
             currentQuestionIndex: 0,
             isPaused: false,
             gameOver: false,
             timeLeft: initialTime,
-          }
+          },
         });
       }
     } catch (error) {
       console.error("Error restarting game:", error);
     }
-  }, [config, clearQuestionEffects, isHost, roomCode]);
+  }, [
+    config,
+    clearQuestionEffects,
+    isHost,
+    roomCode,
+    savePlayerScoresToDatabase,
+  ]);
 
   const getCardInfo = useCallback(
     (name: string) => {
@@ -1072,67 +1380,85 @@ const QuizGame = () => {
     setShowConfig(!showConfig);
   }, [showConfig]);
 
-// FIXED: Timer effect - Only host manages the timer
-useEffect(() => {
-  // Clear existing timer
-  if (timerRef.current) {
-    clearTimeout(timerRef.current);
-    timerRef.current = null;
-  }
-
-  if (isHost) {
-    const shouldRunTimer = timeLeft > 0 &&
-                          !allPlayersAnswered &&
-                          !isPaused &&
-                          !showLeaderboardAfterAnswer &&
-                          !gameOver;
-
-    if (shouldRunTimer) {
-      timerRef.current = setTimeout(() => {
-        const newTime = timeLeft - 1;
-        setTimeLeft(newTime);
-        broadcastTimeUpdate(newTime);
-        
-        // When time runs out, mark all unanswered players as answered with -1
-        if (newTime === 0) {
-          setPlayers((prev) =>
-            prev.map((player) =>
-              !player.hasAnswered ? { ...player, hasAnswered: true, selectedAnswer: -1 } : player
-            )
-          );
-        }
-      }, 1000);
-    }
-  }
-
-  return () => {
+  // FIXED: Timer effect - Only host manages the timer
+  useEffect(() => {
+    // Clear existing timer
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-  };
-}, [
-  timeLeft,
-  allPlayersAnswered,
-  isPaused,
-  showLeaderboardAfterAnswer,
-  gameOver,
-  isHost,
-  broadcastTimeUpdate
-]);
+
+    if (isHost) {
+      const shouldRunTimer =
+        timeLeft > 0 &&
+        !allPlayersAnswered &&
+        !isPaused &&
+        !showLeaderboardAfterAnswer &&
+        !gameOver;
+
+      if (shouldRunTimer) {
+        timerRef.current = setTimeout(() => {
+          const newTime = timeLeft - 1;
+          setTimeLeft(newTime);
+          broadcastTimeUpdate(newTime);
+
+          // When time runs out, mark all unanswered players as answered with -1
+          if (newTime === 0) {
+            setPlayers((prev) => {
+              const updatedPlayers = prev.map((player) =>
+                !player.hasAnswered
+                  ? { ...player, hasAnswered: true, selectedAnswer: -1 }
+                  : player
+              );
+
+              // Save to database
+              savePlayerScoresToDatabase(updatedPlayers);
+
+              return updatedPlayers;
+            });
+          }
+        }, 1000);
+      }
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [
+    timeLeft,
+    allPlayersAnswered,
+    isPaused,
+    showLeaderboardAfterAnswer,
+    gameOver,
+    isHost,
+    broadcastTimeUpdate,
+    savePlayerScoresToDatabase,
+  ]);
 
   // Score updates effect
   useEffect(() => {
     scoreUpdates.forEach((update) => {
       setTimeout(() => {
-        setPlayers((prevPlayers) =>
-          prevPlayers.map((player) =>
-            player.id === update.playerId ? { ...player, score: player.score + update.points } : player
-          )
-        );
+        setPlayers((prevPlayers) => {
+          const updatedPlayers = prevPlayers.map((player) =>
+            player.id === update.playerId
+              ? { ...player, score: player.score + update.points }
+              : player
+          );
+
+          // Save to database
+          if (isHost) {
+            savePlayerScoresToDatabase(updatedPlayers);
+          }
+
+          return updatedPlayers;
+        });
       }, 1000);
     });
-  }, [scoreUpdates]);
+  }, [scoreUpdates, isHost, savePlayerScoresToDatabase]);
 
   // FIXED: Cleanup effect
   useEffect(() => {
@@ -1144,7 +1470,7 @@ useEffect(() => {
           ref.current = null;
         }
       });
-      
+
       // Clear effect cleanup timers
       effectCleanupRef.current.forEach((timeout) => clearTimeout(timeout));
       effectCleanupRef.current = [];
@@ -1159,7 +1485,7 @@ useEffect(() => {
 
   // Loading state
   if (loading) return <LoadingState />;
-  
+
   // Error state
   if (error) return <ErrorState error={error} />;
 
@@ -1198,7 +1524,9 @@ useEffect(() => {
 
   // Game over state
   if (gameOver) {
-    return <GameOver players={players} onGoHome={goHome} onRestart={restartGame} />;
+    return (
+      <GameOver players={players} onGoHome={goHome} onRestart={restartGame} />
+    );
   }
 
   const getModifiedQuestion = () => {
@@ -1212,7 +1540,9 @@ useEffect(() => {
       );
     }
 
-    const filteredOptions: string[] = modifiedOptions.filter((opt): opt is string => opt !== null);
+    const filteredOptions: string[] = modifiedOptions.filter(
+      (opt): opt is string => opt !== null
+    );
 
     return {
       ...currentQuestion,
@@ -1241,8 +1571,12 @@ useEffect(() => {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5 }}
         style={{
-          filter: gameModifiers.cssEffects.includes("blur(4px)") ? "blur(4px)" : undefined,
-          transform: gameModifiers.cssEffects.includes("transform: rotate(180deg)")
+          filter: gameModifiers.cssEffects.includes("blur(4px)")
+            ? "blur(4px)"
+            : undefined,
+          transform: gameModifiers.cssEffects.includes(
+            "transform: rotate(180deg)"
+          )
             ? "rotate(180deg)"
             : undefined,
         }}
@@ -1270,7 +1604,9 @@ useEffect(() => {
               scoreUpdates={scoreUpdates}
               showLeaderboardAfterAnswer={showLeaderboardAfterAnswer}
               roundScore={roundScore}
-              showLeaderboard={showLeaderboardAfterAnswer || (timeLeft === 0 && isAnswered)}
+              showLeaderboard={
+                showLeaderboardAfterAnswer || (timeLeft === 0 && isAnswered)
+              }
             />
 
             <QuestionCard
@@ -1288,17 +1624,33 @@ useEffect(() => {
               allPlayersAnswered={allPlayersAnswered}
             />
 
-            <CardLog usedCardsLog={usedCardsLog} getCardInfo={getCardInfo} showCardInfo={showCardInfo} />
+            <CardLog
+              usedCardsLog={usedCardsLog}
+              getCardInfo={getCardInfo}
+              showCardInfo={showCardInfo}
+            />
           </motion.div>
         </div>
 
         <PlayerHand currentPlayerHand={currentPlayerHand} useCard={useCard} />
 
-        <CardAnimation activeCards={activeCards} isDrawingCard={isDrawingCard} drawnCard={drawnCard} />
+        <CardAnimation
+          activeCards={activeCards}
+          isDrawingCard={isDrawingCard}
+          drawnCard={drawnCard}
+        />
 
-        <ConfigViewer showConfig={showConfig} config={config} toggleConfigView={toggleConfigView} />
+        <ConfigViewer
+          showConfig={showConfig}
+          config={config}
+          toggleConfigView={toggleConfigView}
+        />
 
-        <PauseOverlay isPaused={isPaused} pausedBy={pausedBy} togglePause={togglePause} />
+        <PauseOverlay
+          isPaused={isPaused}
+          pausedBy={pausedBy}
+          togglePause={togglePause}
+        />
       </motion.div>
     </>
   );
