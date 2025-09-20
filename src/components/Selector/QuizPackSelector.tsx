@@ -188,7 +188,7 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
             className="w-auto inline-flex items-center space-x-2 px-3"
           >
             <FaPlus className="text-green-400" />
-            <span>Add Custom Pack</span>
+            <span>Add Custom Pack (coming soon)</span>
           </Link>
         </motion.button>
       </motion.div>

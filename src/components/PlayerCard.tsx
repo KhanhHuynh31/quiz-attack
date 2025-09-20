@@ -14,7 +14,12 @@ interface PlayerCardProps {
   showKickButton: boolean;
 }
 
-const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index, showKickButton }) => {
+const PlayerCard: React.FC<PlayerCardProps> = ({
+  player,
+  onKick,
+  index,
+  showKickButton,
+}) => {
   const [isHovered, setIsHovered] = useState(false);
   const { language } = useI18n();
   const t =
@@ -121,20 +126,6 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, onKick, index, showKick
           className="relative w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-gray-700"
         >
           {getAvatarContent()}
-          {player.isHost && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{
-                delay: 0.2 + index * 0.1,
-                type: "spring",
-                stiffness: 300,
-              }}
-              className="absolute -top-1 -right-1"
-            >
-              <FaCrown className="text-yellow-400 text-sm drop-shadow-lg" />
-            </motion.div>
-          )}
         </motion.div>
 
         <div>

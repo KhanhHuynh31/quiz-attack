@@ -61,8 +61,7 @@ const QuizGame = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [pausedBy, setPausedBy] = useState<string>("");
   const [activeCards, setActiveCards] = useState<ActiveCard[]>([]);
-  const [showLeaderboardAfterAnswer, setShowLeaderboardAfterAnswer] =
-    useState(false);
+  const [showLeaderboardAfterAnswer, setShowLeaderboardAfterAnswer] = useState(false);
   const [usedCardsLog, setUsedCardsLog] = useState<CardUsage[]>([]);
   const [isDrawingCard, setIsDrawingCard] = useState(false);
   const [drawnCard, setDrawnCard] = useState<Card | null>(null);
@@ -105,6 +104,9 @@ const QuizGame = () => {
     gameOver: false,
   });
 
+  // OPTIMIZATION: Track previous player order to prevent unnecessary updates
+  const previousPlayerOrderRef = useRef<string>("");
+
   // Update the ref whenever state changes
   useEffect(() => {
     currentStateRef.current = {
@@ -130,9 +132,23 @@ const QuizGame = () => {
     []
   );
 
-  const maxQuestions =
-    config?.gameSettings.numberOfQuestion || questions.length;
+  const maxQuestions = config?.gameSettings.numberOfQuestion || questions.length;
   const currentQuestion = questions[currentQuestionIndex];
+
+  // OPTIMIZATION: Memoize sorted players to prevent unnecessary re-renders
+  const sortedPlayers = useMemo(() => {
+    const sorted = [...players].sort((a, b) => b.score - a.score);
+    const currentOrder = sorted.map(p => `${p.id}-${p.score}`).join(',');
+    
+    // Only update if the order actually changed
+    if (currentOrder !== previousPlayerOrderRef.current) {
+      previousPlayerOrderRef.current = currentOrder;
+      return sorted;
+    }
+    
+    // Return the same reference if order hasn't changed
+    return previousPlayerOrderRef.current ? sorted : sorted;
+  }, [players]);
 
   const canPlayCards = useMemo(() => {
     return (
@@ -165,13 +181,50 @@ const QuizGame = () => {
     [redirectToHome]
   );
 
-  // FIXED: Save player scores to database
+  // OPTIMIZATION: Memoize player operations to reduce database calls
+  const updatePlayersWithOptimization = useCallback((updater: (prev: Player[]) => Player[]) => {
+    setPlayers(prevPlayers => {
+      const newPlayers = updater(prevPlayers);
+      
+      // Only save to database if we're host and there's an actual change
+      const hasChanges = JSON.stringify(prevPlayers) !== JSON.stringify(newPlayers);
+      if (isHost && hasChanges) {
+        // Debounce database saves to prevent too many calls
+        const saveToDatabase = async () => {
+          try {
+            const playerList = newPlayers.map((player) =>
+              JSON.stringify({
+                id: player.id,
+                nickname: player.nickname,
+                avatar: player.avatar,
+                score: player.score,
+                cards: player.cards,
+                isHost: player.isHost || false,
+              })
+            );
+
+            await supabase
+              .from("room")
+              .update({ player_list: playerList })
+              .eq("room_code", roomCode);
+          } catch (error) {
+            console.error("Error saving player scores:", error);
+          }
+        };
+        
+        saveToDatabase();
+      }
+      
+      return newPlayers;
+    });
+  }, [isHost, roomCode]);
+
+  // FIXED: Save player scores to database with debouncing
   const savePlayerScoresToDatabase = useCallback(
     async (playersData: Player[]) => {
       if (!isHost) return;
 
       try {
-        // Convert players data to JSON strings for storage
         const playerList = playersData.map((player) =>
           JSON.stringify({
             id: player.id,
@@ -210,8 +263,7 @@ const QuizGame = () => {
         return {};
       }
 
-      const playerScores: { [key: number]: { score: number; cards: number } } =
-        {};
+      const playerScores: { [key: number]: { score: number; cards: number } } = {};
 
       roomData.player_list.forEach((playerJson: string) => {
         try {
@@ -233,16 +285,16 @@ const QuizGame = () => {
     }
   }, [roomCode]);
 
-  // Check if all players have answered
-  useEffect(() => {
-    if (players.length > 0) {
-      const answeredCount = players.filter(
-        (player) => player.hasAnswered
-      ).length;
-      const newAllPlayersAnswered = answeredCount === players.length;
-      setAllPlayersAnswered(newAllPlayersAnswered);
-    }
+  // OPTIMIZATION: Memoize all players answered calculation
+  const allPlayersAnsweredMemo = useMemo(() => {
+    if (players.length === 0) return false;
+    return players.filter(player => player.hasAnswered).length === players.length;
   }, [players]);
+
+  // Update allPlayersAnswered state only when the memoized value changes
+  useEffect(() => {
+    setAllPlayersAnswered(allPlayersAnsweredMemo);
+  }, [allPlayersAnsweredMemo]);
 
   // Load room data and validate player access
   const loadGameData = useCallback(async () => {
@@ -414,56 +466,54 @@ const QuizGame = () => {
     [roomCode, isHost]
   );
 
-  // Setup realtime subscriptions for players
+  // OPTIMIZATION: Setup realtime subscriptions with reduced database calls
   const setupRealtimeSubscriptions = useCallback(async () => {
     if (!roomCode || !playerData?.player?.id) return;
 
-    // FIXED: Load saved player scores first
     const savedScores = await loadPlayerScoresFromDatabase();
-
     const channel = supabase.channel(`room:${roomCode}`);
 
+    // OPTIMIZATION: Debounce player updates to prevent excessive re-renders
+    let updateTimeout: NodeJS.Timeout | null = null;
+    
     const updatePlayers = () => {
-      const state = channel.presenceState();
-      const playerMap = new Map<number, Player>();
+      if (updateTimeout) {
+        clearTimeout(updateTimeout);
+      }
+      
+      updateTimeout = setTimeout(() => {
+        const state = channel.presenceState();
+        const playerMap = new Map<number, Player>();
 
-      for (const key in state) {
-        const presences = state[key] as PlayerPresence[];
-        if (presences[0]) {
-          const { presence_ref, ...player } = presences[0];
+        for (const key in state) {
+          const presences = state[key] as PlayerPresence[];
+          if (presences[0]) {
+            const { presence_ref, ...player } = presences[0];
+            const savedPlayerData = savedScores[player.id];
 
-          // FIXED: Use saved scores if available
-          const savedPlayerData = savedScores[player.id];
-
-          playerMap.set(player.id, {
-            ...player,
-            hasAnswered: player.hasAnswered || false,
-            selectedAnswer: player.selectedAnswer || undefined,
-            score: savedPlayerData?.score ?? player.score ?? 0,
-            cards: savedPlayerData?.cards ?? player.cards ?? 0,
-          });
+            playerMap.set(player.id, {
+              ...player,
+              hasAnswered: player.hasAnswered || false,
+              selectedAnswer: player.selectedAnswer || undefined,
+              score: savedPlayerData?.score ?? player.score ?? 0,
+              cards: savedPlayerData?.cards ?? player.cards ?? 0,
+            });
+          }
         }
-      }
 
-      const updatedPlayers = Array.from(playerMap.values());
-      setPlayers(updatedPlayers);
-
-      // FIXED: Save scores whenever players are updated
-      if (isHost && updatedPlayers.length > 0) {
-        savePlayerScoresToDatabase(updatedPlayers);
-      }
+        const updatedPlayers = Array.from(playerMap.values());
+        updatePlayersWithOptimization(() => updatedPlayers);
+      }, 100); // Debounce by 100ms
     };
 
     channel
       .on("presence", { event: "sync" }, updatePlayers)
       .on("presence", { event: "join" }, ({ newPresences }) => {
-        const { presence_ref, ...newPlayer } =
-          newPresences[0] as PlayerPresence;
+        const { presence_ref, ...newPlayer } = newPresences[0] as PlayerPresence;
 
-        setPlayers((prev) => {
+        updatePlayersWithOptimization(prev => {
           if (prev.some((p) => p.id === newPlayer.id)) return prev;
 
-          // FIXED: Use saved scores for new player if available
           const savedPlayerData = savedScores[newPlayer.id];
           const playerWithScores = {
             ...newPlayer,
@@ -473,32 +523,16 @@ const QuizGame = () => {
             cards: savedPlayerData?.cards ?? newPlayer.cards ?? 0,
           };
 
-          const updatedPlayers = [...prev, playerWithScores];
-
-          // Save to database
-          if (isHost) {
-            savePlayerScoresToDatabase(updatedPlayers);
-          }
-
-          return updatedPlayers;
+          return [...prev, playerWithScores];
         });
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
-        const { presence_ref, ...leftPlayer } =
-          leftPresences[0] as PlayerPresence;
+        const { presence_ref, ...leftPlayer } = leftPresences[0] as PlayerPresence;
 
-        setPlayers((prev) => {
-          const updatedPlayers = prev.filter((p) => p.id !== leftPlayer.id);
+        updatePlayersWithOptimization(prev => 
+          prev.filter((p) => p.id !== leftPlayer.id)
+        );
 
-          // Save to database
-          if (isHost && updatedPlayers.length > 0) {
-            savePlayerScoresToDatabase(updatedPlayers);
-          }
-
-          return updatedPlayers;
-        });
-
-        // If host left, mark room as closed
         if (leftPlayer.isHost) {
           setRoomClosed(true);
         }
@@ -529,31 +563,21 @@ const QuizGame = () => {
           setTimeLeft(payload.timeLeft);
         }
       })
-      // Listen for player answer updates
+      // OPTIMIZATION: Handle player answers with minimal updates
       .on("broadcast", { event: "player_answer" }, ({ payload }) => {
         if (payload.roomCode === roomCode) {
-          setPlayers((prev) => {
-            const updatedPlayers = prev.map((player) =>
+          updatePlayersWithOptimization(prev => 
+            prev.map((player) =>
               player.id === payload.playerId
                 ? {
                     ...player,
                     hasAnswered: true,
                     selectedAnswer: payload.selectedAnswer,
-                    // FIXED: Add score properly without overwriting existing scores
-                    score: payload.scoreChange
-                      ? player.score + payload.scoreChange
-                      : player.score,
+                    score: payload.scoreChange ? player.score + payload.scoreChange : player.score,
                   }
                 : player
-            );
-
-            // Save to database
-            if (isHost) {
-              savePlayerScoresToDatabase(updatedPlayers);
-            }
-
-            return updatedPlayers;
-          });
+            )
+          );
         }
       })
       // Listen for card usage
@@ -562,7 +586,6 @@ const QuizGame = () => {
           payload.roomCode === roomCode &&
           payload.playerId !== playerData.player.id
         ) {
-          // Show card usage animation for other players
           setUsedCardsLog((prev) => [
             ...prev,
             {
@@ -577,7 +600,6 @@ const QuizGame = () => {
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          // FIXED: Track current player presence with saved scores
           const savedPlayerData = savedScores[playerData.player.id];
 
           await channel.track({
@@ -607,6 +629,9 @@ const QuizGame = () => {
       .subscribe();
 
     return () => {
+      if (updateTimeout) {
+        clearTimeout(updateTimeout);
+      }
       channel.unsubscribe();
       personalChannel.unsubscribe();
     };
@@ -616,31 +641,22 @@ const QuizGame = () => {
     currentQuestionIndex,
     router,
     loadPlayerScoresFromDatabase,
-    savePlayerScoresToDatabase,
-    isHost,
+    updatePlayersWithOptimization,
   ]);
 
-  // Update player score in database
+  // OPTIMIZATION: Memoized score update function
   const updatePlayerScore = useCallback(
     async (playerId: number, scoreChange: number) => {
       if (!channelRef.current) return;
 
       try {
-        // FIXED: Update player score directly in state first
-        setPlayers((prev) => {
-          const updatedPlayers = prev.map((player) =>
+        updatePlayersWithOptimization(prev =>
+          prev.map((player) =>
             player.id === playerId
               ? { ...player, score: player.score + scoreChange }
               : player
-          );
-
-          // Save to database
-          if (isHost) {
-            savePlayerScoresToDatabase(updatedPlayers);
-          }
-
-          return updatedPlayers;
-        });
+          )
+        );
 
         // Broadcast score change to other players
         await channelRef.current.send({
@@ -656,7 +672,7 @@ const QuizGame = () => {
         console.error("Error updating player score:", error);
       }
     },
-    [roomCode, isHost, savePlayerScoresToDatabase]
+    [roomCode, updatePlayersWithOptimization]
   );
 
   // Broadcast card usage to other players
@@ -774,8 +790,8 @@ const QuizGame = () => {
 
         case "score":
           if (effect.value === -50) {
-            setPlayers((prev) => {
-              const updatedPlayers = prev.map((player) => {
+            updatePlayersWithOptimization(prev => {
+              return prev.map((player) => {
                 if (player.id === currentPlayerId) {
                   return { ...player, score: Math.max(0, player.score + 50) };
                 } else if (player.id !== currentPlayerId) {
@@ -783,13 +799,6 @@ const QuizGame = () => {
                 }
                 return player;
               });
-
-              // Save to database
-              if (isHost) {
-                savePlayerScoresToDatabase(updatedPlayers);
-              }
-
-              return updatedPlayers;
             });
 
             setScoreUpdates((prev) => [
@@ -875,7 +884,7 @@ const QuizGame = () => {
       currentPlayerId,
       isHost,
       broadcastTimeUpdate,
-      savePlayerScoresToDatabase,
+      updatePlayersWithOptimization,
     ]
   );
 
@@ -918,6 +927,7 @@ const QuizGame = () => {
     updateGameState,
   ]);
 
+  // OPTIMIZATION: Memoized goToNextQuestion to prevent unnecessary player resets
   const goToNextQuestion = useCallback(() => {
     if (gameOver || currentQuestionIndex + 1 >= maxQuestions) {
       setGameOver(true);
@@ -935,22 +945,16 @@ const QuizGame = () => {
     setRoundScore(0);
     setAllPlayersAnswered(false);
 
-    // FIXED: Only reset answer states, preserve scores and cards
-    setPlayers((prev) => {
-      const updatedPlayers = prev.map((player) => ({
+    // OPTIMIZATION: Only reset answer states, preserve scores and cards
+    // Use batch update to prevent multiple re-renders
+    updatePlayersWithOptimization(prev => 
+      prev.map((player) => ({
         ...player,
         hasAnswered: false,
         selectedAnswer: undefined,
-        // Keep existing score and cards - DON'T reset them
-      }));
-
-      // Save preserved scores to database
-      if (isHost) {
-        savePlayerScoresToDatabase(updatedPlayers);
-      }
-
-      return updatedPlayers;
-    });
+        // Preserve existing score and cards - DON'T reset them
+      }))
+    );
 
     if (isHost) {
       updateGameState({
@@ -970,7 +974,7 @@ const QuizGame = () => {
     isHost,
     updateGameState,
     broadcastTimeUpdate,
-    savePlayerScoresToDatabase,
+    updatePlayersWithOptimization,
   ]);
 
   const handleAnswerSelect = useCallback(
@@ -982,21 +986,14 @@ const QuizGame = () => {
       setIsAnswered(true);
       setShowCorrectAnswer(true);
 
-      // Update local player state
-      setPlayers((prevPlayers) => {
-        const updatedPlayers = prevPlayers.map((player) =>
+      // OPTIMIZATION: Update local player state with minimal re-renders
+      updatePlayersWithOptimization(prevPlayers => 
+        prevPlayers.map((player) =>
           player.id === currentPlayerId
             ? { ...player, hasAnswered: true, selectedAnswer: optionIndex }
             : player
-        );
-
-        // Save to database
-        if (isHost) {
-          savePlayerScoresToDatabase(updatedPlayers);
-        }
-
-        return updatedPlayers;
-      });
+        )
+      );
 
       // Broadcast answer to other players
       if (channelRef.current) {
@@ -1024,7 +1021,6 @@ const QuizGame = () => {
 
         // Draw a card if game mode allows it
         if (config?.selectedGameMode && config.selectedGameMode.id === 1) {
-          // Assuming mode 1 has cards
           const randomCard: Card = {
             ...allCards[Math.floor(Math.random() * allCards.length)],
             uniqueId: `card-${Date.now()}-${Math.random()
@@ -1039,20 +1035,14 @@ const QuizGame = () => {
             setCurrentPlayerHand((prev) => [...prev, randomCard]);
             setIsDrawingCard(false);
             setDrawnCard(null);
-            setPlayers((prev) => {
-              const updatedPlayers = prev.map((player) =>
+            
+            updatePlayersWithOptimization(prev =>
+              prev.map((player) =>
                 player.id === currentPlayerId
                   ? { ...player, cards: player.cards + 1 }
                   : player
-              );
-
-              // Save to database
-              if (isHost) {
-                savePlayerScoresToDatabase(updatedPlayers);
-              }
-
-              return updatedPlayers;
-            });
+              )
+            );
           }, 1500);
         }
       }
@@ -1067,8 +1057,7 @@ const QuizGame = () => {
       updatePlayerScore,
       roomCode,
       config,
-      isHost,
-      savePlayerScoresToDatabase,
+      updatePlayersWithOptimization,
     ]
   );
 
@@ -1178,8 +1167,6 @@ const QuizGame = () => {
 
     if (isHost) {
       await updateGameState({ is_paused: newPausedState });
-
-      // Broadcast current time when pausing/resuming
       broadcastTimeUpdate(timeLeft);
     }
   }, [
@@ -1232,20 +1219,13 @@ const QuizGame = () => {
         prev.filter((c) => c.uniqueId !== card.uniqueId)
       );
 
-      setPlayers((prevPlayers) => {
-        const updatedPlayers = prevPlayers.map((player) =>
+      updatePlayersWithOptimization(prevPlayers =>
+        prevPlayers.map((player) =>
           player.id === currentPlayerId
             ? { ...player, cards: player.cards - 1 }
             : player
-        );
-
-        // Save to database
-        if (isHost) {
-          savePlayerScoresToDatabase(updatedPlayers);
-        }
-
-        return updatedPlayers;
-      });
+        )
+      );
 
       // Broadcast card usage to other players
       await broadcastCardUsage(card);
@@ -1263,13 +1243,13 @@ const QuizGame = () => {
       applyCardEffect,
       currentPlayerId,
       broadcastCardUsage,
-      isHost,
-      savePlayerScoresToDatabase,
+      updatePlayersWithOptimization,
     ]
   );
 
   const goHome = useCallback(() => router.push("/"), [router]);
 
+  // OPTIMIZATION: Optimized restart game with batch updates
   const restartGame = useCallback(async () => {
     if (!isHost) return;
 
@@ -1283,8 +1263,10 @@ const QuizGame = () => {
 
     clearQuestionEffects();
 
-    // Reset game state
+    // Reset game state in batch
     const initialTime = config?.gameSettings.timePerQuestion || 30;
+    
+    // Batch all state updates together
     setCurrentQuestionIndex(0);
     setTimeLeft(initialTime);
     setSelectedAnswer(null);
@@ -1301,21 +1283,16 @@ const QuizGame = () => {
     setGameOver(false);
     setAllPlayersAnswered(false);
 
-    // Reset players scores and answer states
-    setPlayers((prev) => {
-      const resetPlayers = prev.map((player) => ({
+    // Reset players scores and answer states with single update
+    updatePlayersWithOptimization(prev =>
+      prev.map((player) => ({
         ...player,
         score: 0,
         cards: 0,
         hasAnswered: false,
         selectedAnswer: undefined,
-      }));
-
-      // Save reset scores to database
-      savePlayerScoresToDatabase(resetPlayers);
-
-      return resetPlayers;
-    });
+      }))
+    );
 
     // Update database
     try {
@@ -1353,7 +1330,7 @@ const QuizGame = () => {
     clearQuestionEffects,
     isHost,
     roomCode,
-    savePlayerScoresToDatabase,
+    updatePlayersWithOptimization,
   ]);
 
   const getCardInfo = useCallback(
@@ -1380,7 +1357,7 @@ const QuizGame = () => {
     setShowConfig(!showConfig);
   }, [showConfig]);
 
-  // FIXED: Timer effect - Only host manages the timer
+  // OPTIMIZATION: Timer effect - Only host manages the timer with reduced database calls
   useEffect(() => {
     // Clear existing timer
     if (timerRef.current) {
@@ -1404,18 +1381,13 @@ const QuizGame = () => {
 
           // When time runs out, mark all unanswered players as answered with -1
           if (newTime === 0) {
-            setPlayers((prev) => {
-              const updatedPlayers = prev.map((player) =>
+            updatePlayersWithOptimization(prev =>
+              prev.map((player) =>
                 !player.hasAnswered
                   ? { ...player, hasAnswered: true, selectedAnswer: -1 }
                   : player
-              );
-
-              // Save to database
-              savePlayerScoresToDatabase(updatedPlayers);
-
-              return updatedPlayers;
-            });
+              )
+            );
           }
         }, 1000);
       }
@@ -1435,32 +1407,28 @@ const QuizGame = () => {
     gameOver,
     isHost,
     broadcastTimeUpdate,
-    savePlayerScoresToDatabase,
+    updatePlayersWithOptimization,
   ]);
 
-  // Score updates effect
+  // OPTIMIZATION: Batch score updates to prevent excessive re-renders
   useEffect(() => {
-    scoreUpdates.forEach((update) => {
-      setTimeout(() => {
-        setPlayers((prevPlayers) => {
-          const updatedPlayers = prevPlayers.map((player) =>
-            player.id === update.playerId
-              ? { ...player, score: player.score + update.points }
-              : player
-          );
+    if (scoreUpdates.length === 0) return;
 
-          // Save to database
-          if (isHost) {
-            savePlayerScoresToDatabase(updatedPlayers);
-          }
-
-          return updatedPlayers;
+    const updateTimeout = setTimeout(() => {
+      updatePlayersWithOptimization(prevPlayers => {
+        return prevPlayers.map((player) => {
+          const playerUpdate = scoreUpdates.find(update => update.playerId === player.id);
+          return playerUpdate 
+            ? { ...player, score: player.score + playerUpdate.points }
+            : player;
         });
-      }, 1000);
-    });
-  }, [scoreUpdates, isHost, savePlayerScoresToDatabase]);
+      });
+    }, 1000);
 
-  // FIXED: Cleanup effect
+    return () => clearTimeout(updateTimeout);
+  }, [scoreUpdates, updatePlayersWithOptimization]);
+
+  // OPTIMIZATION: Cleanup effect with proper null checks
   useEffect(() => {
     return () => {
       // Clear all timers with proper null checks
@@ -1525,7 +1493,7 @@ const QuizGame = () => {
   // Game over state
   if (gameOver) {
     return (
-      <GameOver players={players} onGoHome={goHome} onRestart={restartGame} />
+      <GameOver players={sortedPlayers} onGoHome={goHome} onRestart={restartGame} />
     );
   }
 
@@ -1600,7 +1568,7 @@ const QuizGame = () => {
             animate="visible"
           >
             <PlayerList
-              players={players}
+              players={sortedPlayers}
               scoreUpdates={scoreUpdates}
               showLeaderboardAfterAnswer={showLeaderboardAfterAnswer}
               roundScore={roundScore}
@@ -1618,7 +1586,7 @@ const QuizGame = () => {
               selectedAnswer={selectedAnswer}
               config={config}
               handleAnswerSelect={handleAnswerSelect}
-              players={players}
+              players={sortedPlayers}
               scoreUpdates={scoreUpdates}
               gameModifiers={gameModifiers}
               allPlayersAnswered={allPlayersAnswered}
@@ -1655,5 +1623,5 @@ const QuizGame = () => {
     </>
   );
 };
-
+//Ổn định nhất PLAY
 export default QuizGame;

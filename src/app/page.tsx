@@ -175,7 +175,7 @@ const saveRoomSettings = (settings: RoomSettings): void => {
         customAvatarImage: null,
       }
     );
-    
+
     playerData.roomSettings = settings;
     saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
   } catch (error) {
@@ -189,13 +189,13 @@ const loadRoomSettings = (): RoomSettings | null => {
       LOCAL_STORAGE_KEYS.PLAYER_DATA,
       null
     );
-    
+
     if (!playerData || !playerData.roomSettings) {
       return null;
     }
-    
+
     const roomSettings = playerData.roomSettings;
-    
+
     // Check if settings are expired (24 hours)
     const now = Date.now();
     if (roomSettings.createdAt + ROOM_SETTINGS_EXPIRY < now) {
@@ -204,7 +204,7 @@ const loadRoomSettings = (): RoomSettings | null => {
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, updatedPlayerData);
       return null;
     }
-    
+
     return roomSettings;
   } catch (error) {
     console.error("Failed to load room settings:", error);
@@ -220,7 +220,7 @@ class DatabaseService {
         .from("room")
         .select("room_code")
         .eq("room_code", roomCode)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== "PGRST116") {
         console.error("Error checking room:", error);
@@ -560,9 +560,9 @@ const UserProfile: React.FC<{
           showAvatarHint
             ? {
                 boxShadow: [
-                  "0 0 0 0 rgba(255, 107, 53, 0.7)",
-                  "0 0 0 10px rgba(255, 107, 53, 0)",
-                  "0 0 0 0 rgba(255, 107, 53, 0)",
+                  "0 0 0 0 #FF6B35B3", // #FF6B35 with 70% opacity (B3 = 70% in hex)
+                  "0 0 0 10px transparent",
+                  "0 0 0 0 transparent",
                 ],
               }
             : undefined
@@ -785,7 +785,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         customAvatarImage,
         true // isHost = true when creating room
       );
-      
+
       // Update player data with host status
       const playerData: PlayerData = {
         player,
@@ -794,7 +794,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
       };
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
-      
+
       await DatabaseService.createRoom(
         roomCode,
         player,
@@ -850,7 +850,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         customAvatarImage,
         false // isHost = false when joining room
       );
-      
+
       // Update player data with guest status
       const playerData: PlayerData = {
         player,
@@ -859,7 +859,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
       };
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
-      
+
       await DatabaseService.joinRoom(roomCode, player);
 
       // Save room settings if password was provided and not empty
@@ -900,7 +900,11 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
 
     // Check for saved room settings first
     const savedSettings = loadRoomSettings();
-    if (savedSettings && savedSettings.roomCode === joinCode && savedSettings.password) {
+    if (
+      savedSettings &&
+      savedSettings.roomCode === joinCode &&
+      savedSettings.password
+    ) {
       // Use saved password
       const isValid = await DatabaseService.verifyRoomPassword(
         joinCode,
@@ -996,7 +1000,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
               placeholder="Enter room password"
               className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all mb-4"
               onKeyPress={(e) => {
-                if (e.key === 'Enter') {
+                if (e.key === "Enter") {
                   handlePasswordSubmit();
                 }
               }}
@@ -1113,10 +1117,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
 
         {/* Main Content Panel */}
         <motion.section variants={slideInRight} className="lg:col-span-8">
-          <motion.div
-            className="rounded-2xl lg:rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-4 lg:p-6 shadow-2xl backdrop-blur-md relative"
-            whileHover={{ borderColor: "rgba(255, 255, 255, 0.2)" }}
-          >
+          <motion.div className="rounded-2xl lg:rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-4 lg:p-6 shadow-2xl backdrop-blur-md relative">
             {/* User Profile */}
             <motion.div variants={fadeUp}>
               <UserProfile

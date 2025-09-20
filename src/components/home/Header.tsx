@@ -16,7 +16,14 @@ export const Header: React.FC = () => {
           animate={{ y: [5, 0, 5] }} // bắt đầu ở dưới, đi lên giữa, rồi xuống lại
           transition={{ duration: 2, repeat: Infinity }}
         >
-          <Image src={logo} alt="Quiz Attack Logo" width={50} height={50} />
+          <Image
+            src={logo}
+            alt="Quiz Attack Logo"
+            width={50}
+            height={50}
+            priority
+            className="w-8 h-8"
+          />
         </motion.div>
         <div className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-white to-[#EAEAEA] bg-clip-text text-transparent">
           {t.title}

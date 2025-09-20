@@ -8,16 +8,17 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   showCorrectAnswer: true,
   maxPlayers: null,
   selectedQuizPack: null,
+  allowJoinAfterStart: false, // Add this with a default value
 } as const;
 
 export const saveGameConfig = (roomCode: string, config: GameConfig): void => {
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     localStorage.setItem(`quizConfig-${roomCode}`, JSON.stringify(config));
   }
 };
 
 export const loadGameConfig = (roomCode: string): GameConfig | null => {
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     const item = localStorage.getItem(`quizConfig-${roomCode}`);
     return item ? JSON.parse(item) : null;
   }
@@ -25,7 +26,7 @@ export const loadGameConfig = (roomCode: string): GameConfig | null => {
 };
 
 export const clearGameConfig = (roomCode: string): void => {
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     localStorage.removeItem(`quizConfig-${roomCode}`);
   }
 };
