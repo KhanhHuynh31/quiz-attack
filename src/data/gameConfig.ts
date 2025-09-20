@@ -8,7 +8,6 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   showCorrectAnswer: true,
   maxPlayers: null,
   selectedQuizPack: null,
-  allowJoinAfterStart: false, // Add this with a default value
 } as const;
 
 export const saveGameConfig = (roomCode: string, config: GameConfig): void => {
