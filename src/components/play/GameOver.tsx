@@ -21,7 +21,7 @@ const GameOver: React.FC<GameOverProps> = ({ players, onGoHome, onRestart }) => 
               <div key={player.id} className="flex justify-between items-center p-3 bg-white/5 rounded-lg">
                 <div className="flex items-center">
                   <span className="font-bold mr-3">{index + 1}.</span>
-                  <span>{player.name}</span>
+                  <span>{player.nickname}</span>
                 </div>
                 <span className="font-bold">{player.score} điểm</span>
               </div>
