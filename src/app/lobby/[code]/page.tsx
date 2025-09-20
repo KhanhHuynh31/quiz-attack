@@ -437,6 +437,11 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
 
   const canStartGame = isHost && !isLoading && isPlayerVerified;
 
+  // Kiểm tra xem có phải là Quiz Mode (mode 2) không
+  const isQuizMode = useMemo(() => {
+    return selectedGameMode?.id === 2;
+  }, [selectedGameMode]);
+
   // Load player data and check if redirect is needed
   useEffect(() => {
     const data = loadPlayerData();
@@ -905,9 +910,11 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
         icon: FaCog,
         iconColor: "text-gray-400",
         component: (
+          // Thêm prop isQuizMode để ẩn các setting về thẻ sức mạnh
           <GameSettingSelector
             settings={gameSettings}
             onSettingChange={isHost ? handleSettingChange : () => {}}
+            isQuizMode={isQuizMode}
           />
         ),
       },

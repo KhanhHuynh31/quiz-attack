@@ -10,6 +10,7 @@ import { powerCards } from "@/data/cardData";
 interface GameSettingSelectorProps {
   settings: GameSettings;
   onSettingChange: <K extends keyof GameSettings>(key: K, value: GameSettings[K]) => void;
+  isQuizMode?: boolean; // Thêm prop mới để xác định có phải Quiz Mode không
 }
 
 // Constants for easy maintenance
@@ -20,7 +21,8 @@ const ROUND_LIMITS = { min: 1, max: 50 } as const;
 
 const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({ 
   settings, 
-  onSettingChange 
+  onSettingChange,
+  isQuizMode = false // Giá trị mặc định là false
 }) => {
   const { language } = useI18n();
   const t = lobbyTranslations[language as keyof typeof lobbyTranslations] || lobbyTranslations.en;
@@ -49,20 +51,23 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
 
   // Xử lý logic thẻ sức mạnh được chọn - đảm bảo mặc định tất cả được chọn
   const effectiveAllowedCards = useMemo(() => {
+    // Nếu là Quiz Mode, không cần xử lý thẻ sức mạnh
+    if (isQuizMode) return [];
+    
     // Nếu chưa có allowedCards hoặc rỗng, trả về tất cả thẻ để hiển thị đúng UI
     if (!settings.allowedCards || settings.allowedCards.length === 0) {
       return allCardIds;
     }
     // Ensure all values are strings
     return settings.allowedCards.map(card => card.toString());
-  }, [settings.allowedCards, allCardIds]);
+  }, [settings.allowedCards, allCardIds, isQuizMode]);
 
-  // Initialize allowed cards if empty (ensures default selection)
+  // Initialize allowed cards if empty (ensures default selection) - chỉ khi không phải Quiz Mode
   useEffect(() => {
-    if (!settings.allowedCards || settings.allowedCards.length === 0) {
+    if (!isQuizMode && (!settings.allowedCards || settings.allowedCards.length === 0)) {
       onSettingChange("allowedCards", allCardIds);
     }
-  }, [allCardIds, onSettingChange, settings.allowedCards]);
+  }, [allCardIds, onSettingChange, settings.allowedCards, isQuizMode]);
 
   // Update temp values when settings change
   useEffect(() => {
@@ -386,162 +391,164 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
         </motion.p>
       </motion.div>
 
-      {/* Power Cards Settings */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4, type: "spring", stiffness: 100 }}
-        className="bg-gradient-to-br from-amber-900/30 to-yellow-900/30 rounded-2xl p-5 border border-white/10 shadow-lg"
-      >
-        <div className="flex justify-between items-center mb-4">
-          <h4 className="font-semibold text-white flex items-center space-x-3">
-            <motion.span
-              animate={{ rotate: [0, 10, -10, 0] }}
-              transition={{ duration: 1, repeat: Infinity, repeatDelay: 3 }}
-            >
-              🃏
-            </motion.span>
-            <span>{t.powerCards}</span>
-            <span className="text-amber-400 text-sm">
-              ({effectiveAllowedCards.length}/{allCardIds.length})
-            </span>
-          </h4>
-          
-          <div className="flex items-center space-x-2">
-            {/* Toggle All Button */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleToggleAllCards}
-              className="px-3 py-1 bg-amber-600/80 hover:bg-amber-600 rounded-lg text-white text-sm font-medium transition-colors"
-            >
-              {allFilteredCardsSelected ? "Deselect All" : "Select All"}
-            </motion.button>
-            
-            {/* Card Type Filter */}
-            <div className="relative">
-              <select 
-                value={selectedCardType}
-                onChange={(e) => setSelectedCardType(e.target.value)}
-                className="bg-amber-800/50 border border-amber-700 rounded-lg px-3 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none"
+      {/* Power Cards Settings - Ẩn khi là Quiz Mode */}
+      {!isQuizMode && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, type: "spring", stiffness: 100 }}
+          className="bg-gradient-to-br from-amber-900/30 to-yellow-900/30 rounded-2xl p-5 border border-white/10 shadow-lg"
+        >
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="font-semibold text-white flex items-center space-x-3">
+              <motion.span
+                animate={{ rotate: [0, 10, -10, 0] }}
+                transition={{ duration: 1, repeat: Infinity, repeatDelay: 3 }}
               >
-                {cardTypes.map(type => (
-                  <option key={type} value={type}>
-                    {type === "all" ? "All Types" : type.charAt(0).toUpperCase() + type.slice(1)}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                <svg className="w-4 h-4 fill-current text-amber-400" viewBox="0 0 20 20">
-                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                </svg>
+                🃏
+              </motion.span>
+              <span>{t.powerCards}</span>
+              <span className="text-amber-400 text-sm">
+                ({effectiveAllowedCards.length}/{allCardIds.length})
+              </span>
+            </h4>
+            
+            <div className="flex items-center space-x-2">
+              {/* Toggle All Button */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleToggleAllCards}
+                className="px-3 py-1 bg-amber-600/80 hover:bg-amber-600 rounded-lg text-white text-sm font-medium transition-colors"
+              >
+                {allFilteredCardsSelected ? "Deselect All" : "Select All"}
+              </motion.button>
+              
+              {/* Card Type Filter */}
+              <div className="relative">
+                <select 
+                  value={selectedCardType}
+                  onChange={(e) => setSelectedCardType(e.target.value)}
+                  className="bg-amber-800/50 border border-amber-700 rounded-lg px-3 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none"
+                >
+                  {cardTypes.map(type => (
+                    <option key={type} value={type}>
+                      {type === "all" ? "All Types" : type.charAt(0).toUpperCase() + type.slice(1)}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                  <svg className="w-4 h-4 fill-current text-amber-400" viewBox="0 0 20 20">
+                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                  </svg>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        
-        <p className="text-sm text-white/70 mb-4">{t.powerCardsDesc}</p>
-        
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={selectedCardType}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-3"
-          >
-            {filteredCards.map((card, index) => {
-              const isEnabled = isCardSelected(card.id.toString());
-              return (
-                <motion.div
-                  key={card.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1, type: "spring", stiffness: 100 }}
-                  whileHover={{ y: -5 }}
-                  className={`relative p-4 rounded-xl border transition-all cursor-pointer overflow-hidden ${
-                    isEnabled 
-                      ? `bg-gradient-to-r ${card.color} border-transparent shadow-lg` 
-                      : "bg-gray-800/50 border-gray-700 opacity-70"
-                  }`}
-                  onClick={() => handleCardToggle(card.id.toString())}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <span className="text-xl">{card.emoji}</span>
-                        <span className={`font-semibold ${isEnabled ? "text-white" : "text-gray-400"}`}>
-                          {card.name}
-                        </span>
+          
+          <p className="text-sm text-white/70 mb-4">{t.powerCardsDesc}</p>
+          
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={selectedCardType}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="grid grid-cols-1 md:grid-cols-2 gap-3"
+            >
+              {filteredCards.map((card, index) => {
+                const isEnabled = isCardSelected(card.id.toString());
+                return (
+                  <motion.div
+                    key={card.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1, type: "spring", stiffness: 100 }}
+                    whileHover={{ y: -5 }}
+                    className={`relative p-4 rounded-xl border transition-all cursor-pointer overflow-hidden ${
+                      isEnabled 
+                        ? `bg-gradient-to-r ${card.color} border-transparent shadow-lg` 
+                        : "bg-gray-800/50 border-gray-700 opacity-70"
+                    }`}
+                    onClick={() => handleCardToggle(card.id.toString())}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <span className="text-xl">{card.emoji}</span>
+                          <span className={`font-semibold ${isEnabled ? "text-white" : "text-gray-400"}`}>
+                            {card.name}
+                          </span>
+                        </div>
+                        <p className={`text-xs ${isEnabled ? "text-white/90" : "text-gray-500"} mb-1`}>
+                          {card.description}
+                        </p>
+                        {card.value && (
+                          <span className={`text-xs px-2 py-1 rounded-full ${isEnabled ? "bg-black/20 text-white" : "bg-gray-700/50 text-gray-400"}`}>
+                            Value: {card.value}
+                          </span>
+                        )}
                       </div>
-                      <p className={`text-xs ${isEnabled ? "text-white/90" : "text-gray-500"} mb-1`}>
-                        {card.description}
-                      </p>
-                      {card.value && (
-                        <span className={`text-xs px-2 py-1 rounded-full ${isEnabled ? "bg-black/20 text-white" : "bg-gray-700/50 text-gray-400"}`}>
-                          Value: {card.value}
-                        </span>
-                      )}
+                      
+                      {/* Checkmark indicator */}
+                      <motion.div
+                        className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ml-2 ${
+                          isEnabled ? "bg-white" : "bg-gray-600"
+                        }`}
+                        animate={{ scale: isEnabled ? [0.8, 1.1, 1] : 1 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        {isEnabled && (
+                          <motion.svg
+                            initial={{ pathLength: 0 }}
+                            animate={{ pathLength: 1 }}
+                            transition={{ duration: 0.3, delay: 0.1 }}
+                            className="w-3 h-3 text-indigo-600"
+                            viewBox="0 0 12 10"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="3"
+                          >
+                            <path d="M1 5L4 8L11 1" />
+                          </motion.svg>
+                        )}
+                      </motion.div>
                     </div>
                     
-                    {/* Checkmark indicator */}
+                    {/* Hover effect */}
                     <motion.div
-                      className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ml-2 ${
-                        isEnabled ? "bg-white" : "bg-gray-600"
-                      }`}
-                      animate={{ scale: isEnabled ? [0.8, 1.1, 1] : 1 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      {isEnabled && (
-                        <motion.svg
-                          initial={{ pathLength: 0 }}
-                          animate={{ pathLength: 1 }}
-                          transition={{ duration: 0.3, delay: 0.1 }}
-                          className="w-3 h-3 text-indigo-600"
-                          viewBox="0 0 12 10"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                        >
-                          <path d="M1 5L4 8L11 1" />
-                        </motion.svg>
-                      )}
-                    </motion.div>
-                  </div>
-                  
-                  {/* Hover effect */}
-                  <motion.div
-                    className="absolute inset-0 bg-white/10 opacity-0"
-                    whileHover={{ opacity: 0.2 }}
-                  />
-                  
-                  {/* Type badge */}
-                  <div className={`absolute bottom-2 right-2 text-xs px-2 py-1 rounded-full ${isEnabled ? "bg-black/30 text-white/90" : "bg-gray-700/70 text-gray-400"}`}>
-                    {card.type || "unknown"}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </motion.div>
-        </AnimatePresence>
+                      className="absolute inset-0 bg-white/10 opacity-0"
+                      whileHover={{ opacity: 0.2 }}
+                    />
+                    
+                    {/* Type badge */}
+                    <div className={`absolute bottom-2 right-2 text-xs px-2 py-1 rounded-full ${isEnabled ? "bg-black/30 text-white/90" : "bg-gray-700/70 text-gray-400"}`}>
+                      {card.type || "unknown"}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          </AnimatePresence>
 
-        {/* Selection Summary */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="mt-4 p-3 bg-amber-800/20 rounded-lg border border-amber-700/30"
-        >
-          <p className="text-sm text-amber-200">
-            <strong>Selected Cards:</strong> {effectiveAllowedCards.length} of {allCardIds.length} cards enabled
-          </p>
-          {effectiveAllowedCards.length === 0 && (
-            <p className="text-xs text-red-400 mt-1">
-              ⚠️ At least one power card must be selected for the game to function properly.
+          {/* Selection Summary */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mt-4 p-3 bg-amber-800/20 rounded-lg border border-amber-700/30"
+          >
+            <p className="text-sm text-amber-200">
+              <strong>Selected Cards:</strong> {effectiveAllowedCards.length} of {allCardIds.length} cards enabled
             </p>
-          )}
+            {effectiveAllowedCards.length === 0 && (
+              <p className="text-xs text-red-400 mt-1">
+                ⚠️ At least one power card must be selected for the game to function properly.
+              </p>
+            )}
+          </motion.div>
         </motion.div>
-      </motion.div>
+      )}
     </div>
   );
 };
