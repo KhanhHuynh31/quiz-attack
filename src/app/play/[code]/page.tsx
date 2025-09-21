@@ -96,18 +96,15 @@ const QuizGame = () => {
   const answerPhaseTimerRef = useRef<NodeJS.Timeout | null>(null);
   const effectCleanupRef = useRef<NodeJS.Timeout[]>([]);
   const channelRef = useRef<any>(null);
-
-  // Add refs to track the current state for cleanup
   const currentStateRef = useRef({
     showLeaderboardAfterAnswer: false,
     showCorrectAnswer: false,
     gameOver: false,
   });
-
-  // OPTIMIZATION: Track previous player order to prevent unnecessary updates
   const previousPlayerOrderRef = useRef<string>("");
+  const lastHostSeenRef = useRef<number>(Date.now());
+  const hostCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Update the ref whenever state changes
   useEffect(() => {
     currentStateRef.current = {
       showLeaderboardAfterAnswer,
@@ -135,18 +132,15 @@ const QuizGame = () => {
   const maxQuestions = config?.gameSettings.numberOfQuestion || questions.length;
   const currentQuestion = questions[currentQuestionIndex];
 
-  // OPTIMIZATION: Memoize sorted players to prevent unnecessary re-renders
   const sortedPlayers = useMemo(() => {
     const sorted = [...players].sort((a, b) => b.score - a.score);
     const currentOrder = sorted.map(p => `${p.id}-${p.score}`).join(',');
     
-    // Only update if the order actually changed
     if (currentOrder !== previousPlayerOrderRef.current) {
       previousPlayerOrderRef.current = currentOrder;
       return sorted;
     }
     
-    // Return the same reference if order hasn't changed
     return previousPlayerOrderRef.current ? sorted : sorted;
   }, [players]);
 
@@ -168,6 +162,15 @@ const QuizGame = () => {
     timeLeft,
   ]);
 
+  const allPlayersAnsweredMemo = useMemo(() => {
+    if (players.length === 0) return false;
+    return players.filter(player => player.hasAnswered).length === players.length;
+  }, [players]);
+
+  useEffect(() => {
+    setAllPlayersAnswered(allPlayersAnsweredMemo);
+  }, [allPlayersAnsweredMemo]);
+
   const redirectToHome = useCallback(() => {
     setTimeout(() => router.push("/"), 2000);
   }, [router]);
@@ -181,15 +184,12 @@ const QuizGame = () => {
     [redirectToHome]
   );
 
-  // OPTIMIZATION: Memoize player operations to reduce database calls
   const updatePlayersWithOptimization = useCallback((updater: (prev: Player[]) => Player[]) => {
     setPlayers(prevPlayers => {
       const newPlayers = updater(prevPlayers);
       
-      // Only save to database if we're host and there's an actual change
       const hasChanges = JSON.stringify(prevPlayers) !== JSON.stringify(newPlayers);
       if (isHost && hasChanges) {
-        // Debounce database saves to prevent too many calls
         const saveToDatabase = async () => {
           try {
             const playerList = newPlayers.map((player) =>
@@ -219,37 +219,6 @@ const QuizGame = () => {
     });
   }, [isHost, roomCode]);
 
-  // FIXED: Save player scores to database with debouncing
-  const savePlayerScoresToDatabase = useCallback(
-    async (playersData: Player[]) => {
-      if (!isHost) return;
-
-      try {
-        const playerList = playersData.map((player) =>
-          JSON.stringify({
-            id: player.id,
-            nickname: player.nickname,
-            avatar: player.avatar,
-            score: player.score,
-            cards: player.cards,
-            isHost: player.isHost || false,
-          })
-        );
-
-        await supabase
-          .from("room")
-          .update({ player_list: playerList })
-          .eq("room_code", roomCode);
-
-        console.log("Player scores saved to database:", playerList);
-      } catch (error) {
-        console.error("Error saving player scores:", error);
-      }
-    },
-    [isHost, roomCode]
-  );
-
-  // FIXED: Load player scores from database
   const loadPlayerScoresFromDatabase = useCallback(async () => {
     try {
       const { data: roomData, error } = await supabase
@@ -285,23 +254,10 @@ const QuizGame = () => {
     }
   }, [roomCode]);
 
-  // OPTIMIZATION: Memoize all players answered calculation
-  const allPlayersAnsweredMemo = useMemo(() => {
-    if (players.length === 0) return false;
-    return players.filter(player => player.hasAnswered).length === players.length;
-  }, [players]);
-
-  // Update allPlayersAnswered state only when the memoized value changes
-  useEffect(() => {
-    setAllPlayersAnswered(allPlayersAnsweredMemo);
-  }, [allPlayersAnsweredMemo]);
-
-  // Load room data and validate player access
   const loadGameData = useCallback(async () => {
     try {
       setLoading(true);
 
-      // Load player data from localStorage
       const localPlayerData = loadPlayerData();
       if (
         !localPlayerData ||
@@ -317,7 +273,6 @@ const QuizGame = () => {
       setCurrentPlayerId(localPlayerData.player.id);
       setIsHost(localPlayerData.player.isHost || false);
 
-      // Load room data from database
       const { data: roomData, error: roomError } = await supabase
         .from("room")
         .select("*")
@@ -329,7 +284,6 @@ const QuizGame = () => {
         return;
       }
 
-      // Check if room has password and validate it
       if (roomData.room_password) {
         const storedRoomSettings = localPlayerData?.roomSettings;
         const isPasswordValid = !!(
@@ -345,30 +299,25 @@ const QuizGame = () => {
         }
       }
 
-      // Check if game is still active
       if (roomData.room_status === "finished") {
         showError("Game has ended");
         return;
       }
 
-      // Load game settings
       const parsedSettings: GameSettings = roomData.setting_list?.[0]
         ? JSON.parse(roomData.setting_list[0])
         : DEFAULT_GAME_SETTINGS;
 
-      // Load quiz pack
       const quizPackId = roomData.quiz_pack || DEFAULT_QUIZ_PACKS[0].id;
       const selectedQuizPack =
         DEFAULT_QUIZ_PACKS.find((pack: QuizPack) => pack.id === quizPackId) ||
         DEFAULT_QUIZ_PACKS[0];
 
-      // Load game mode
       const selectedGameMode =
         GAME_MODES.find((mode: GameMode) => mode.id === roomData.game_mode) ||
         GAME_MODES[0] ||
         null;
 
-      // Load questions for the quiz pack
       const { data: questionsData, error: questionsError } = await supabase
         .from("quiz_questions")
         .select("*")
@@ -391,7 +340,6 @@ const QuizGame = () => {
 
       setQuestions(convertedQuestions);
 
-      // Create extended game config
       const gameConfig: ExtendedGameConfig = {
         roomCode,
         players: [], // Will be populated from realtime
@@ -414,7 +362,6 @@ const QuizGame = () => {
     }
   }, [roomCode, showError, router]);
 
-  // Broadcast timer updates to all players (host only)
   const broadcastTimeUpdate = useCallback(
     async (time: number) => {
       if (!channelRef.current || !isHost) return;
@@ -435,7 +382,6 @@ const QuizGame = () => {
     [roomCode, isHost]
   );
 
-  // Update game state in database (host only)
   const updateGameState = useCallback(
     async (updates: {
       current_question_index?: number;
@@ -447,10 +393,8 @@ const QuizGame = () => {
       if (!isHost || !channelRef.current) return;
 
       try {
-        // Update database
         await supabase.from("room").update(updates).eq("room_code", roomCode);
 
-        // Broadcast to all players
         await channelRef.current.send({
           type: "broadcast",
           event: "game_state_update",
@@ -466,14 +410,37 @@ const QuizGame = () => {
     [roomCode, isHost]
   );
 
-  // OPTIMIZATION: Setup realtime subscriptions with reduced database calls
+  const trackHostPresence = useCallback((presences: any[]) => {
+    const hostPresent = presences.some(p => p.isHost);
+    if (hostPresent) {
+      lastHostSeenRef.current = Date.now();
+      
+      if (hostCheckTimeoutRef.current) {
+        clearTimeout(hostCheckTimeoutRef.current);
+        hostCheckTimeoutRef.current = null;
+      }
+    } else if (!isHost) {
+      const timeSinceLastHostSeen = Date.now() - lastHostSeenRef.current;
+      
+      if (timeSinceLastHostSeen > 3000) { 
+        if (!hostCheckTimeoutRef.current) {
+          hostCheckTimeoutRef.current = setTimeout(() => {
+            const finalCheck = Date.now() - lastHostSeenRef.current;
+            if (finalCheck > 5000) {
+              setRoomClosed(true);
+            }
+          }, 2000);
+        }
+      }
+    }
+  }, [isHost]);
+
   const setupRealtimeSubscriptions = useCallback(async () => {
     if (!roomCode || !playerData?.player?.id) return;
 
     const savedScores = await loadPlayerScoresFromDatabase();
     const channel = supabase.channel(`room:${roomCode}`);
 
-    // OPTIMIZATION: Debounce player updates to prevent excessive re-renders
     let updateTimeout: NodeJS.Timeout | null = null;
     
     const updatePlayers = () => {
@@ -484,11 +451,13 @@ const QuizGame = () => {
       updateTimeout = setTimeout(() => {
         const state = channel.presenceState();
         const playerMap = new Map<number, Player>();
+        const allPresences: any[] = [];
 
         for (const key in state) {
           const presences = state[key] as PlayerPresence[];
           if (presences[0]) {
             const { presence_ref, ...player } = presences[0];
+            allPresences.push(player);
             const savedPlayerData = savedScores[player.id];
 
             playerMap.set(player.id, {
@@ -501,15 +470,19 @@ const QuizGame = () => {
           }
         }
 
+        trackHostPresence(allPresences);
+
         const updatedPlayers = Array.from(playerMap.values());
         updatePlayersWithOptimization(() => updatedPlayers);
-      }, 100); // Debounce by 100ms
+      }, 100);
     };
 
     channel
       .on("presence", { event: "sync" }, updatePlayers)
       .on("presence", { event: "join" }, ({ newPresences }) => {
         const { presence_ref, ...newPlayer } = newPresences[0] as PlayerPresence;
+
+        trackHostPresence([newPlayer]);
 
         updatePlayersWithOptimization(prev => {
           if (prev.some((p) => p.id === newPlayer.id)) return prev;
@@ -533,11 +506,19 @@ const QuizGame = () => {
           prev.filter((p) => p.id !== leftPlayer.id)
         );
 
-        if (leftPlayer.isHost) {
-          setRoomClosed(true);
+        if (leftPlayer.isHost && !isHost) {
+          setTimeout(() => {
+            const currentState = channel.presenceState();
+            const hostStillPresent = Object.values(currentState).some((presences: any) => 
+              presences.some((p: any) => p.isHost)
+            );
+            
+            if (!hostStillPresent) {
+              setRoomClosed(true);
+            }
+          }, 3000);
         }
       })
-      // Listen for game state updates
       .on("broadcast", { event: "game_state_update" }, ({ payload }) => {
         if (payload.roomCode === roomCode) {
           if (payload.current_question_index !== undefined) {
@@ -557,13 +538,11 @@ const QuizGame = () => {
           }
         }
       })
-      // Listen for timer updates
       .on("broadcast", { event: "timer_update" }, ({ payload }) => {
         if (payload.roomCode === roomCode) {
           setTimeLeft(payload.timeLeft);
         }
       })
-      // OPTIMIZATION: Handle player answers with minimal updates
       .on("broadcast", { event: "player_answer" }, ({ payload }) => {
         if (payload.roomCode === roomCode) {
           updatePlayersWithOptimization(prev => 
@@ -580,7 +559,6 @@ const QuizGame = () => {
           );
         }
       })
-      // Listen for card usage
       .on("broadcast", { event: "card_used" }, ({ payload }) => {
         if (
           payload.roomCode === roomCode &&
@@ -617,7 +595,6 @@ const QuizGame = () => {
 
     channelRef.current = channel;
 
-    // Also listen for kick notifications on personal channel
     const personalChannel = supabase.channel(`player:${playerData.player.id}`);
     personalChannel
       .on("broadcast", { event: "kicked" }, (payload) => {
@@ -632,6 +609,10 @@ const QuizGame = () => {
       if (updateTimeout) {
         clearTimeout(updateTimeout);
       }
+      if (hostCheckTimeoutRef.current) {
+        clearTimeout(hostCheckTimeoutRef.current);
+        hostCheckTimeoutRef.current = null;
+      }
       channel.unsubscribe();
       personalChannel.unsubscribe();
     };
@@ -642,9 +623,9 @@ const QuizGame = () => {
     router,
     loadPlayerScoresFromDatabase,
     updatePlayersWithOptimization,
+    trackHostPresence,
   ]);
 
-  // OPTIMIZATION: Memoized score update function
   const updatePlayerScore = useCallback(
     async (playerId: number, scoreChange: number) => {
       if (!channelRef.current) return;
@@ -658,7 +639,6 @@ const QuizGame = () => {
           )
         );
 
-        // Broadcast score change to other players
         await channelRef.current.send({
           type: "broadcast",
           event: "player_answer",
@@ -675,7 +655,6 @@ const QuizGame = () => {
     [roomCode, updatePlayersWithOptimization]
   );
 
-  // Broadcast card usage to other players
   const broadcastCardUsage = useCallback(
     async (card: Card) => {
       if (!channelRef.current || !playerData) return;
@@ -699,41 +678,9 @@ const QuizGame = () => {
     [roomCode, playerData]
   );
 
-  // Load data on mount
-  useEffect(() => {
-    loadGameData();
-  }, [loadGameData]);
-
-  // Setup realtime subscriptions after data is loaded
-  useEffect(() => {
-    let cleanupFn: (() => void) | undefined;
-
-    if (!loading && !error && playerData) {
-      (async () => {
-        try {
-          cleanupFn = await setupRealtimeSubscriptions();
-        } catch (err) {
-          console.error("Error setting up realtime subscriptions:", err);
-        }
-      })();
-    }
-
-    return () => {
-      if (typeof cleanupFn === "function") {
-        try {
-          cleanupFn();
-        } catch (err) {
-          console.error("Error during realtime cleanup:", err);
-        }
-      }
-    };
-  }, [loading, error, playerData, setupRealtimeSubscriptions]);
-
   const applyCardEffect = useCallback(
     (card: Card, cardData: Card) => {
-      const effectId = `effect-${Date.now()}-${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
+      const effectId = `effect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const effect = cardData.effect;
       const currentTime = Date.now();
 
@@ -903,31 +850,6 @@ const QuizGame = () => {
     });
   }, []);
 
-  useEffect(() => {
-    clearQuestionEffects();
-  }, [currentQuestionIndex, clearQuestionEffects]);
-
-  useEffect(() => {
-    if (
-      config &&
-      currentQuestionIndex + 1 >= config.gameSettings.numberOfQuestion
-    ) {
-      if (showLeaderboardAfterAnswer) {
-        const gameOverTimer = setTimeout(() => {
-          setGameOver(true);
-          updateGameState({ game_over: true, room_status: "finished" });
-        }, 5000);
-        return () => clearTimeout(gameOverTimer);
-      }
-    }
-  }, [
-    currentQuestionIndex,
-    config,
-    showLeaderboardAfterAnswer,
-    updateGameState,
-  ]);
-
-  // OPTIMIZATION: Memoized goToNextQuestion to prevent unnecessary player resets
   const goToNextQuestion = useCallback(() => {
     if (gameOver || currentQuestionIndex + 1 >= maxQuestions) {
       setGameOver(true);
@@ -945,14 +867,11 @@ const QuizGame = () => {
     setRoundScore(0);
     setAllPlayersAnswered(false);
 
-    // OPTIMIZATION: Only reset answer states, preserve scores and cards
-    // Use batch update to prevent multiple re-renders
     updatePlayersWithOptimization(prev => 
       prev.map((player) => ({
         ...player,
         hasAnswered: false,
         selectedAnswer: undefined,
-        // Preserve existing score and cards - DON'T reset them
       }))
     );
 
@@ -986,16 +905,14 @@ const QuizGame = () => {
       setIsAnswered(true);
       setShowCorrectAnswer(true);
 
-      // OPTIMIZATION: Update local player state with minimal re-renders
-      updatePlayersWithOptimization(prevPlayers => 
-        prevPlayers.map((player) =>
+      updatePlayersWithOptimization(prev => 
+        prev.map((player) =>
           player.id === currentPlayerId
             ? { ...player, hasAnswered: true, selectedAnswer: optionIndex }
             : player
         )
       );
 
-      // Broadcast answer to other players
       if (channelRef.current) {
         await channelRef.current.send({
           type: "broadcast",
@@ -1004,7 +921,7 @@ const QuizGame = () => {
             roomCode,
             playerId: currentPlayerId,
             selectedAnswer: optionIndex,
-            scoreChange: 0, // Will be updated later if correct
+            scoreChange: 0,
           },
         });
       }
@@ -1016,16 +933,12 @@ const QuizGame = () => {
         earnedScore = Math.round(100 * gameModifiers.scoreMultiplier);
         setRoundScore(earnedScore);
 
-        // Update score
         updatePlayerScore(currentPlayerId, earnedScore);
 
-        // Draw a card if game mode allows it
         if (config?.selectedGameMode && config.selectedGameMode.id === 1) {
           const randomCard: Card = {
             ...allCards[Math.floor(Math.random() * allCards.length)],
-            uniqueId: `card-${Date.now()}-${Math.random()
-              .toString(36)
-              .substr(2, 9)}`,
+            uniqueId: `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           };
 
           setDrawnCard(randomCard);
@@ -1061,99 +974,38 @@ const QuizGame = () => {
     ]
   );
 
-  // EMERGENCY BACKUP: Force transition if stuck on leaderboard too long
-  useEffect(() => {
-    let emergencyTimeout: NodeJS.Timeout | null = null;
+  const handleTimeoutForUnansweredPlayers = useCallback(() => {
+    console.log("Time up! Marking unanswered players as having answered incorrectly");
+    
+    updatePlayersWithOptimization(prev => 
+      prev.map((player) => {
+        if (!player.hasAnswered) {
+          return { 
+            ...player, 
+            hasAnswered: true, 
+            selectedAnswer: -1
+          };
+        }
+        return player;
+      })
+    );
 
-    if (showLeaderboardAfterAnswer && !gameOver) {
-      console.log("Emergency backup timer started (10s)...");
-      emergencyTimeout = setTimeout(() => {
-        console.log("EMERGENCY: Forcing transition from leaderboard!");
-        setShowLeaderboardAfterAnswer(false);
-        setScoreUpdates([]);
-        goToNextQuestion();
-      }, 10000); // 10 seconds emergency backup
+    if (channelRef.current && isHost) {
+      channelRef.current.send({
+        type: "broadcast",
+        event: "timeout_answers",
+        payload: {
+          roomCode,
+        },
+      });
     }
 
-    return () => {
-      if (emergencyTimeout) {
-        clearTimeout(emergencyTimeout);
-      }
-    };
-  }, [showLeaderboardAfterAnswer, gameOver, goToNextQuestion]);
-
-  // SIMPLIFIED: Show leaderboard when all players have answered or time runs out
-  useEffect(() => {
-    console.log("Leaderboard effect triggered:", {
-      allPlayersAnswered,
-      timeLeft,
-      isAnswered,
-      showLeaderboardAfterAnswer,
-      showCorrectAnswer,
-      gameOver,
-      isPaused,
-    });
-
-    // Clear any existing timers to prevent conflicts
-    if (answerPhaseTimerRef.current) {
-      clearTimeout(answerPhaseTimerRef.current);
-      answerPhaseTimerRef.current = null;
+    if (!isAnswered && currentPlayerId) {
+      setIsAnswered(true);
+      setSelectedAnswer(-1);
+      setShowCorrectAnswer(true);
     }
-    if (leaderboardTimerRef.current) {
-      clearTimeout(leaderboardTimerRef.current);
-      leaderboardTimerRef.current = null;
-    }
-
-    // Simplified condition: if all answered OR time is 0, and someone answered
-    const readyForLeaderboard =
-      (allPlayersAnswered || timeLeft === 0) &&
-      isAnswered &&
-      !gameOver &&
-      !isPaused;
-
-    if (
-      readyForLeaderboard &&
-      showCorrectAnswer &&
-      !showLeaderboardAfterAnswer
-    ) {
-      console.log("Starting answer phase timer (2s)...");
-
-      answerPhaseTimerRef.current = setTimeout(() => {
-        console.log("Moving to leaderboard...");
-        setShowCorrectAnswer(false);
-        setShowLeaderboardAfterAnswer(true);
-        // Force move to next question after 4 seconds
-        leaderboardTimerRef.current = setTimeout(() => {
-          console.log("Forcing move to next question...");
-          setShowLeaderboardAfterAnswer(false);
-          setScoreUpdates([]);
-          goToNextQuestion();
-        }, 4000);
-      }, 2000);
-    }
-
-    return () => {
-      if (answerPhaseTimerRef.current) {
-        clearTimeout(answerPhaseTimerRef.current);
-        answerPhaseTimerRef.current = null;
-      }
-      if (leaderboardTimerRef.current) {
-        clearTimeout(leaderboardTimerRef.current);
-        leaderboardTimerRef.current = null;
-      }
-    };
-  }, [
-    allPlayersAnswered,
-    timeLeft,
-    isAnswered,
-    showLeaderboardAfterAnswer,
-    showCorrectAnswer,
-    gameOver,
-    isPaused,
-    roundScore,
-    currentPlayerId,
-    goToNextQuestion,
-  ]);
+  }, [updatePlayersWithOptimization, roomCode, isHost, isAnswered, currentPlayerId]);
 
   const togglePause = useCallback(async () => {
     if (gameOver) return;
@@ -1195,14 +1047,10 @@ const QuizGame = () => {
         return;
       }
 
-      const animationId = `card-${Date.now()}-${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
+      const animationId = `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-      // Apply card effect
       applyCardEffect(card, cardData);
 
-      // Update card usage log
       setUsedCardsLog((prev) => [
         ...prev,
         {
@@ -1214,23 +1062,20 @@ const QuizGame = () => {
         },
       ]);
 
-      // Remove card from hand and update player's card count
       setCurrentPlayerHand((prev) =>
         prev.filter((c) => c.uniqueId !== card.uniqueId)
       );
 
-      updatePlayersWithOptimization(prevPlayers =>
-        prevPlayers.map((player) =>
+      updatePlayersWithOptimization(prev =>
+        prev.map((player) =>
           player.id === currentPlayerId
             ? { ...player, cards: player.cards - 1 }
             : player
         )
       );
 
-      // Broadcast card usage to other players
       await broadcastCardUsage(card);
 
-      // Show card animation
       setActiveCards((prev) => [...prev, { card, id: animationId }]);
       setTimeout(() => {
         setActiveCards((prev) => prev.filter((ac) => ac.id !== animationId));
@@ -1249,11 +1094,9 @@ const QuizGame = () => {
 
   const goHome = useCallback(() => router.push("/"), [router]);
 
-  // OPTIMIZATION: Optimized restart game with batch updates
   const restartGame = useCallback(async () => {
     if (!isHost) return;
 
-    // Clear all timers
     [timerRef, leaderboardTimerRef, answerPhaseTimerRef].forEach((ref) => {
       if (ref.current) {
         clearTimeout(ref.current);
@@ -1263,10 +1106,8 @@ const QuizGame = () => {
 
     clearQuestionEffects();
 
-    // Reset game state in batch
     const initialTime = config?.gameSettings.timePerQuestion || 30;
     
-    // Batch all state updates together
     setCurrentQuestionIndex(0);
     setTimeLeft(initialTime);
     setSelectedAnswer(null);
@@ -1283,7 +1124,6 @@ const QuizGame = () => {
     setGameOver(false);
     setAllPlayersAnswered(false);
 
-    // Reset players scores and answer states with single update
     updatePlayersWithOptimization(prev =>
       prev.map((player) => ({
         ...player,
@@ -1294,7 +1134,6 @@ const QuizGame = () => {
       }))
     );
 
-    // Update database
     try {
       await supabase
         .from("room")
@@ -1304,11 +1143,10 @@ const QuizGame = () => {
           is_paused: false,
           game_over: false,
           room_status: "playing",
-          player_list: [], // Clear saved scores
+          player_list: [],
         })
         .eq("room_code", roomCode);
 
-      // Broadcast restart to all players
       if (channelRef.current) {
         await channelRef.current.send({
           type: "broadcast",
@@ -1357,9 +1195,154 @@ const QuizGame = () => {
     setShowConfig(!showConfig);
   }, [showConfig]);
 
-  // OPTIMIZATION: Timer effect - Only host manages the timer with reduced database calls
   useEffect(() => {
-    // Clear existing timer
+    loadGameData();
+  }, [loadGameData]);
+
+  useEffect(() => {
+    let cleanupFn: (() => void) | undefined;
+
+    if (!loading && !error && playerData) {
+      (async () => {
+        try {
+          cleanupFn = await setupRealtimeSubscriptions();
+        } catch (err) {
+          console.error("Error setting up realtime subscriptions:", err);
+        }
+      })();
+    }
+
+    return () => {
+      if (typeof cleanupFn === "function") {
+        try {
+          cleanupFn();
+        } catch (err) {
+          console.error("Error during realtime cleanup:", err);
+        }
+      }
+    };
+  }, [loading, error, playerData, setupRealtimeSubscriptions]);
+
+  useEffect(() => {
+    if (
+      config &&
+      currentQuestionIndex + 1 >= config.gameSettings.numberOfQuestion
+    ) {
+      if (showLeaderboardAfterAnswer) {
+        const gameOverTimer = setTimeout(() => {
+          setGameOver(true);
+          updateGameState({ game_over: true, room_status: "finished" });
+        }, 5000);
+        return () => clearTimeout(gameOverTimer);
+      }
+    }
+  }, [
+    currentQuestionIndex,
+    config,
+    showLeaderboardAfterAnswer,
+    updateGameState,
+  ]);
+
+  useEffect(() => {
+    clearQuestionEffects();
+  }, [currentQuestionIndex, clearQuestionEffects]);
+
+  useEffect(() => {
+    let emergencyTimeout: NodeJS.Timeout | null = null;
+
+    if (showLeaderboardAfterAnswer && !gameOver) {
+      console.log("Emergency backup timer started (10s)...");
+      emergencyTimeout = setTimeout(() => {
+        console.log("EMERGENCY: Forcing transition from leaderboard!");
+        setShowLeaderboardAfterAnswer(false);
+        setScoreUpdates([]);
+        goToNextQuestion();
+      }, 10000);
+    }
+
+    return () => {
+      if (emergencyTimeout) {
+        clearTimeout(emergencyTimeout);
+      }
+    };
+  }, [showLeaderboardAfterAnswer, gameOver, goToNextQuestion]);
+
+  useEffect(() => {
+    console.log("Leaderboard effect triggered:", {
+      allPlayersAnswered,
+      timeLeft,
+      isAnswered,
+      showLeaderboardAfterAnswer,
+      showCorrectAnswer,
+      gameOver,
+      isPaused,
+    });
+
+    if (answerPhaseTimerRef.current) {
+      clearTimeout(answerPhaseTimerRef.current);
+      answerPhaseTimerRef.current = null;
+    }
+    if (leaderboardTimerRef.current) {
+      clearTimeout(leaderboardTimerRef.current);
+      leaderboardTimerRef.current = null;
+    }
+
+    if (timeLeft === 0 && !gameOver && !isPaused && !allPlayersAnswered) {
+      handleTimeoutForUnansweredPlayers();
+      return;
+    }
+
+    const readyForLeaderboard =
+      (allPlayersAnswered || timeLeft === 0) &&
+      (isAnswered || timeLeft === 0) &&
+      !gameOver &&
+      !isPaused;
+
+    if (
+      readyForLeaderboard &&
+      showCorrectAnswer &&
+      !showLeaderboardAfterAnswer
+    ) {
+      console.log("Starting answer phase timer (2s)...");
+
+      answerPhaseTimerRef.current = setTimeout(() => {
+        console.log("Moving to leaderboard...");
+        setShowCorrectAnswer(false);
+        setShowLeaderboardAfterAnswer(true);
+        leaderboardTimerRef.current = setTimeout(() => {
+          console.log("Forcing move to next question...");
+          setShowLeaderboardAfterAnswer(false);
+          setScoreUpdates([]);
+          goToNextQuestion();
+        }, 4000);
+      }, 2000);
+    }
+
+    return () => {
+      if (answerPhaseTimerRef.current) {
+        clearTimeout(answerPhaseTimerRef.current);
+        answerPhaseTimerRef.current = null;
+      }
+      if (leaderboardTimerRef.current) {
+        clearTimeout(leaderboardTimerRef.current);
+        leaderboardTimerRef.current = null;
+      }
+    };
+  }, [
+    allPlayersAnswered,
+    timeLeft,
+    isAnswered,
+    showLeaderboardAfterAnswer,
+    showCorrectAnswer,
+    gameOver,
+    isPaused,
+    roundScore,
+    currentPlayerId,
+    goToNextQuestion,
+    handleTimeoutForUnansweredPlayers,
+  ]);
+
+  useEffect(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -1378,17 +1361,6 @@ const QuizGame = () => {
           const newTime = timeLeft - 1;
           setTimeLeft(newTime);
           broadcastTimeUpdate(newTime);
-
-          // When time runs out, mark all unanswered players as answered with -1
-          if (newTime === 0) {
-            updatePlayersWithOptimization(prev =>
-              prev.map((player) =>
-                !player.hasAnswered
-                  ? { ...player, hasAnswered: true, selectedAnswer: -1 }
-                  : player
-              )
-            );
-          }
         }, 1000);
       }
     }
@@ -1407,16 +1379,14 @@ const QuizGame = () => {
     gameOver,
     isHost,
     broadcastTimeUpdate,
-    updatePlayersWithOptimization,
   ]);
 
-  // OPTIMIZATION: Batch score updates to prevent excessive re-renders
   useEffect(() => {
     if (scoreUpdates.length === 0) return;
 
     const updateTimeout = setTimeout(() => {
-      updatePlayersWithOptimization(prevPlayers => {
-        return prevPlayers.map((player) => {
+      updatePlayersWithOptimization(prev => {
+        return prev.map((player) => {
           const playerUpdate = scoreUpdates.find(update => update.playerId === player.id);
           return playerUpdate 
             ? { ...player, score: player.score + playerUpdate.points }
@@ -1428,10 +1398,8 @@ const QuizGame = () => {
     return () => clearTimeout(updateTimeout);
   }, [scoreUpdates, updatePlayersWithOptimization]);
 
-  // OPTIMIZATION: Cleanup effect with proper null checks
   useEffect(() => {
     return () => {
-      // Clear all timers with proper null checks
       [timerRef, leaderboardTimerRef, answerPhaseTimerRef].forEach((ref) => {
         if (ref.current) {
           clearTimeout(ref.current);
@@ -1439,11 +1407,14 @@ const QuizGame = () => {
         }
       });
 
-      // Clear effect cleanup timers
+      if (hostCheckTimeoutRef.current) {
+        clearTimeout(hostCheckTimeoutRef.current);
+        hostCheckTimeoutRef.current = null;
+      }
+
       effectCleanupRef.current.forEach((timeout) => clearTimeout(timeout));
       effectCleanupRef.current = [];
 
-      // Unsubscribe from channels
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
@@ -1451,13 +1422,10 @@ const QuizGame = () => {
     };
   }, []);
 
-  // Loading state
   if (loading) return <LoadingState />;
 
-  // Error state
   if (error) return <ErrorState error={error} />;
 
-  // Room closed state
   if (roomClosed) {
     return (
       <div className="min-h-screen flex items-center justify-center text-white">
@@ -1477,7 +1445,6 @@ const QuizGame = () => {
     );
   }
 
-  // No questions state
   if (questions.length === 0 || !currentQuestion) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-blue-900 to-purple-900 text-white p-4">
@@ -1490,7 +1457,6 @@ const QuizGame = () => {
     );
   }
 
-  // Game over state
   if (gameOver) {
     return (
       <GameOver players={sortedPlayers} onGoHome={goHome} onRestart={restartGame} />
@@ -1623,5 +1589,5 @@ const QuizGame = () => {
     </>
   );
 };
-//Ổn định nhất PLAY
+
 export default QuizGame;
