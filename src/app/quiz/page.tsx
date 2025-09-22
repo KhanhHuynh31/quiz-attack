@@ -1,1289 +1,1261 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useState, useEffect, ChangeEvent, FormEvent } from "react";
+import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
-  FaPlus,
-  FaTrash,
-  FaEdit,
-  FaShare,
-  FaDownload,
-  FaQuestionCircle,
-  FaList,
-  FaStore,
-  FaSave,
-  FaTimes,
-  FaCheck,
-  FaImage,
-  FaGamepad,
-  FaTrophy,
-  FaRocket,
-  FaStar,
-  FaBolt,
-  FaCrown,
-  FaFire,
-} from "react-icons/fa";
-
-// Types
-interface QuizQuestion {
-  id: number;
-  question: string;
-  options: string[];
-  correctAnswer: number;
-  explanation: string;
-  imageUrl?: string;
-}
+  FiPlus,
+  FiEdit3,
+  FiTrash2,
+  FiEye,
+  FiSearch,
+  FiFilter,
+  FiBookOpen,
+  FiUser,
+  FiHash,
+  FiSave,
+  FiX,
+  FiImage,
+  FiAward,
+  FiHeart,
+  FiChevronDown,
+  FiCheck,
+} from "react-icons/fi";
+import toast, { Toaster } from "react-hot-toast";
+import { supabase } from "@/lib/supabaseClient";
 
 interface QuizPack {
   id: number;
   name: string;
   description: string;
+  question_count: number;
   category: string;
   author: string;
-  questionCount: number;
-  questions: QuizQuestion[];
 }
 
-// Constants
-const ANIMATION_VARIANTS = {
-  fadeIn: {
-    initial: { opacity: 0, y: 30 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -30 },
-  },
-  slideIn: {
-    initial: { opacity: 0, x: -20 },
-    animate: { opacity: 1, x: 0 },
-    exit: { opacity: 0, x: 20 },
-  },
-  scaleIn: {
-    initial: { opacity: 0, scale: 0.9 },
-    animate: { opacity: 1, scale: 1 },
-    exit: { opacity: 0, scale: 0.9 },
-  },
-};
+interface QuizQuestion {
+  id: number;
+  quiz_pack_id: number;
+  question: string;
+  options: string[];
+  image_url?: string;
+  correct_answer: number;
+  explanation?: string;
+}
 
-const TOAST_STYLES = {
-  success: {
-    background: "linear-gradient(45deg, #4ecdc4, #44a08d)",
-    color: "white",
-  },
-  error: {
-    background: "linear-gradient(45deg, #ff6b6b, #ff8e53)",
-    color: "white",
-  },
-  info: {
-    background: "linear-gradient(45deg, #667eea, #764ba2)",
-    color: "white",
-  },
-};
+interface FormData {
+  name: string;
+  description: string;
+  category: string;
+  author: string;
+}
 
-// Custom Hook for Toast Notifications
-const useToast = () => {
-  const showToast = (
-    message: string,
-    type: "success" | "error" | "info" = "success"
-  ) => {
-    // Create a simple toast notification
-    const toast = document.createElement("div");
-    toast.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg text-white font-bold transform transition-all duration-300 ${
-      type === "success"
-        ? "bg-green-500"
-        : type === "error"
-        ? "bg-red-500"
-        : "bg-blue-500"
-    }`;
-    toast.textContent = message;
+type AuthorFilter = "all" | "official" | "community";
 
-    document.body.appendChild(toast);
-
-    setTimeout(() => {
-      toast.style.opacity = "0";
-      toast.style.transform = "translateX(100%)";
-      setTimeout(() => {
-        document.body.removeChild(toast);
-      }, 300);
-    }, 3000);
-  };
-
-  return { showToast };
-};
-
-// Custom Hook for Quiz Management
-const useQuizManager = () => {
+const QuizPacksCRUD: React.FC = () => {
   const [quizPacks, setQuizPacks] = useState<QuizPack[]>([]);
-  const [shopPacks, setShopPacks] = useState<QuizPack[]>([]);
-  const { showToast } = useToast();
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedAuthor, setSelectedAuthor] = useState<AuthorFilter>("all");
+  const [showCreateForm, setShowCreateForm] = useState<boolean>(false);
+  const [editingPack, setEditingPack] = useState<QuizPack | null>(null);
+  const [viewingQuestions, setViewingQuestions] = useState<number | null>(null);
+  const [likedPacks, setLikedPacks] = useState<Set<number>>(new Set());
+  const [categoryInput, setCategoryInput] = useState<string>("");
+  const [showCategoryInput, setShowCategoryInput] = useState<boolean>(false);
+  const [editingQuestion, setEditingQuestion] = useState<QuizQuestion | null>(null);
+  const [showQuestionForm, setShowQuestionForm] = useState<boolean>(false);
 
-  const createQuizPack = (packData: Partial<QuizPack>): boolean => {
-    if (!packData.name?.trim()) {
-      showToast("Please enter quiz name", "error");
-      return false;
-    }
-
-    const newPack: QuizPack = {
-      id: Date.now(),
-      name: packData.name || "New Quiz",
-      description: packData.description || "",
-      category: packData.category || "General",
-      author: "user",
-      questionCount: 0,
-      questions: [],
-    };
-
-    setQuizPacks((prev) => [...prev, newPack]);
-    showToast("Quiz created successfully!");
-    return true;
-  };
-
-  const updateQuizPack = (updatedPack: QuizPack): boolean => {
-    if (!updatedPack.name.trim()) {
-      showToast("Please enter quiz name", "error");
-      return false;
-    }
-
-    setQuizPacks((prev) =>
-      prev.map((pack) => (pack.id === updatedPack.id ? updatedPack : pack))
-    );
-    showToast("Quiz updated successfully!");
-    return true;
-  };
-
-  const deleteQuizPack = (id: number): boolean => {
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this quiz? This action cannot be undone."
-      )
-    ) {
-      return false;
-    }
-
-    setQuizPacks((prev) => prev.filter((pack) => pack.id !== id));
-    showToast("Quiz deleted successfully!");
-    return true;
-  };
-
-  const shareToShop = (quizPack: QuizPack): boolean => {
-    if (quizPack.questions.length === 0) {
-      showToast("Quiz must have at least one question to share", "error");
-      return false;
-    }
-
-    setShopPacks((prev) => [...prev, { ...quizPack, id: Date.now() }]);
-    showToast("Quiz shared to shop!", "info");
-    return true;
-  };
-
-  const downloadFromShop = (quizPack: QuizPack): void => {
-    const newPack = { ...quizPack, id: Date.now() };
-    setQuizPacks((prev) => [...prev, newPack]);
-    showToast("Quiz downloaded to your collection!");
-  };
-
-  return {
-    quizPacks,
-    shopPacks,
-    createQuizPack,
-    updateQuizPack,
-    deleteQuizPack,
-    shareToShop,
-    downloadFromShop,
-  };
-};
-
-// Custom Hook for Question Management
-const useQuestionManager = (
-  selectedQuizPack: QuizPack | null,
-  onQuizUpdate: (pack: QuizPack) => void
-) => {
-  const { showToast } = useToast();
-
-  const validateQuestion = (question: QuizQuestion): boolean => {
-    if (!question.question.trim()) {
-      showToast("Please enter a question", "error");
-      return false;
-    }
-
-    if (question.options.some((opt) => !opt.trim())) {
-      showToast("Please fill all options", "error");
-      return false;
-    }
-
-    if (!question.explanation?.trim()) {
-      showToast("Please add an explanation", "error");
-      return false;
-    }
-
-    return true;
-  };
-
-  const addQuestion = (question: QuizQuestion): boolean => {
-    if (!selectedQuizPack || !validateQuestion(question)) return false;
-
-    const newQuestion: QuizQuestion = {
-      ...question,
-      id: Date.now(),
-    };
-
-    const updatedPack = {
-      ...selectedQuizPack,
-      questions: [...selectedQuizPack.questions, newQuestion],
-      questionCount: selectedQuizPack.questions.length + 1,
-    };
-
-    onQuizUpdate(updatedPack);
-    showToast("Question added successfully!");
-    return true;
-  };
-
-  const updateQuestion = (question: QuizQuestion): boolean => {
-    if (!selectedQuizPack || !validateQuestion(question)) return false;
-
-    const updatedQuestions = selectedQuizPack.questions.map((q) =>
-      q.id === question.id ? question : q
-    );
-
-    const updatedPack = {
-      ...selectedQuizPack,
-      questions: updatedQuestions,
-    };
-
-    onQuizUpdate(updatedPack);
-    showToast("Question updated successfully!");
-    return true;
-  };
-
-  const deleteQuestion = (questionId: number): boolean => {
-    if (!selectedQuizPack) return false;
-
-    if (!window.confirm("Are you sure you want to delete this question?")) {
-      return false;
-    }
-
-    const updatedQuestions = selectedQuizPack.questions.filter(
-      (q) => q.id !== questionId
-    );
-    const updatedPack = {
-      ...selectedQuizPack,
-      questions: updatedQuestions,
-      questionCount: updatedQuestions.length,
-    };
-
-    onQuizUpdate(updatedPack);
-    showToast("Question deleted successfully!");
-    return true;
-  };
-
-  return { addQuestion, updateQuestion, deleteQuestion };
-};
-
-// Components
-const AnimatedIcon = ({
-  icon: Icon,
-  className = "",
-  animate = true,
-}: {
-  icon: any;
-  className?: string;
-  animate?: boolean;
-}) => (
-  <motion.div
-    animate={animate ? { rotate: 360 } : {}}
-    transition={
-      animate ? { duration: 20, repeat: Infinity, ease: "linear" } : {}
-    }
-    className={className}
-  >
-    <Icon />
-  </motion.div>
-);
-
-const GameButton = ({
-  children,
-  onClick,
-  variant = "primary",
-  className = "",
-  disabled = false,
-  ...props
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  variant?: "primary" | "secondary" | "success" | "danger";
-  className?: string;
-  disabled?: boolean;
-  [key: string]: any;
-}) => {
-  const variants = {
-    primary: "bg-gradient-to-r from-cyan-500 to-blue-500 shadow-cyan-500/25",
-    secondary:
-      "bg-gradient-to-r from-purple-500 to-pink-500 shadow-purple-500/25",
-    success:
-      "bg-gradient-to-r from-green-500 to-emerald-500 shadow-green-500/25",
-    danger: "bg-gradient-to-r from-red-500 to-pink-500 shadow-red-500/25",
-  };
-
-  return (
-    <motion.button
-      whileHover={{ scale: disabled ? 1 : 1.05 }}
-      whileTap={{ scale: disabled ? 1 : 0.95 }}
-      className={`${
-        variants[variant]
-      } text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all duration-300 ${
-        disabled ? "opacity-50 cursor-not-allowed" : ""
-      } ${className}`}
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      {...props}
-    >
-      {children}
-    </motion.button>
-  );
-};
-
-const QuizCard = ({
-  pack,
-  isSelected,
-  onSelect,
-  onDelete,
-  index,
-}: {
-  pack: QuizPack;
-  isSelected: boolean;
-  onSelect: () => void;
-  onDelete: () => void;
-  index: number;
-}) => (
-  <motion.div
-    initial={ANIMATION_VARIANTS.slideIn.initial}
-    animate={ANIMATION_VARIANTS.slideIn.animate}
-    exit={ANIMATION_VARIANTS.slideIn.exit}
-    transition={{ duration: 0.3, delay: index * 0.1 }}
-    className={`relative p-5 border rounded-2xl cursor-pointer transition-all duration-300 overflow-hidden ${
-      isSelected
-        ? "bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border-cyan-400/50 shadow-xl shadow-cyan-500/10"
-        : "bg-slate-700/30 border-slate-600/50 hover:bg-slate-600/30 hover:border-purple-400/50 hover:shadow-lg"
-    }`}
-    onClick={onSelect}
-    whileHover={{ y: -2 }}
-  >
-    <div className="flex justify-between items-start mb-3">
-      <h3 className="font-bold text-white text-lg">{pack.name}</h3>
-      <div className="flex items-center space-x-2">
-        <motion.span
-          className="bg-gradient-to-r from-yellow-400 to-orange-400 text-slate-900 text-xs font-black px-3 py-1 rounded-full"
-          whileHover={{ scale: 1.1 }}
-        >
-          {pack.questionCount} Q
-        </motion.span>
-        <motion.button
-          whileHover={{ scale: 1.2, rotate: 5 }}
-          whileTap={{ scale: 0.9 }}
-          className="text-red-400 hover:text-red-300 p-1"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-        >
-          <FaTrash />
-        </motion.button>
-      </div>
-    </div>
-    <p className="text-gray-300 text-sm mb-3 line-clamp-2">
-      {pack.description}
-    </p>
-    <div className="flex justify-between items-center">
-      <motion.span
-        className="text-xs bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-300 px-3 py-1 rounded-full border border-purple-500/30 font-medium"
-        whileHover={{ scale: 1.05 }}
-      >
-        {pack.category}
-      </motion.span>
-      {isSelected && (
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          className="flex items-center text-cyan-400 text-xs font-bold"
-        >
-          <FaBolt className="mr-1" />
-          ACTIVE
-        </motion.div>
-      )}
-    </div>
-  </motion.div>
-);
-
-const QuestionForm = ({
-  question,
-  onSave,
-  onCancel,
-  onContinue,
-}: {
-  question: QuizQuestion;
-  onSave: (question: QuizQuestion) => void;
-  onCancel: () => void;
-  onContinue?: () => void;
-}) => {
-  const [formData, setFormData] = useState<QuizQuestion>(question);
-
-  const handleOptionChange = (index: number, value: string) => {
-    const newOptions = [...formData.options];
-    newOptions[index] = value;
-    setFormData({ ...formData, options: newOptions });
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave(formData);
-  };
-
-  return (
-    <motion.div
-      initial={ANIMATION_VARIANTS.scaleIn.initial}
-      animate={ANIMATION_VARIANTS.scaleIn.animate}
-      exit={ANIMATION_VARIANTS.scaleIn.exit}
-      className="bg-slate-700/40 backdrop-blur-xl p-8 rounded-2xl border border-slate-600/50 mb-8 shadow-2xl"
-    >
-      <h4 className="font-black text-white mb-6 text-2xl flex items-center">
-        <AnimatedIcon icon={FaBolt} className="mr-3 text-yellow-400" />
-        {question.id ? "MODIFY CHALLENGE" : "FORGE NEW CHALLENGE"}
-      </h4>
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label className="text-gray-300 mb-3 font-bold text-sm flex items-center">
-            <FaQuestionCircle className="mr-2 text-cyan-400" />
-            CHALLENGE QUESTION
-          </label>
-          <motion.input
-            type="text"
-            className="w-full p-4 bg-slate-800/50 border border-slate-600 rounded-xl focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-white placeholder-gray-400 font-medium text-lg"
-            value={formData.question}
-            onChange={(e) =>
-              setFormData({ ...formData, question: e.target.value })
-            }
-            placeholder="Enter your epic question..."
-            required
-            whileFocus={{ scale: 1.02 }}
-          />
-        </div>
-
-        <div>
-          <label className="text-gray-300 mb-3 font-bold text-sm flex items-center">
-            <FaImage className="mr-2 text-purple-400" />
-            IMAGE URL (Optional)
-          </label>
-          <motion.input
-            type="text"
-            className="w-full p-4 bg-slate-800/50 border border-slate-600 rounded-xl focus:ring-2 focus:ring-purple-400 focus:border-transparent text-white placeholder-gray-400 font-medium"
-            value={formData.imageUrl || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, imageUrl: e.target.value })
-            }
-            placeholder="https://example.com/image.jpg"
-            whileFocus={{ scale: 1.02 }}
-          />
-        </div>
-
-        <div>
-          <label className="text-gray-300 mb-3 font-bold text-sm flex items-center">
-            <FaList className="mr-2 text-green-400" />
-            BATTLE OPTIONS
-          </label>
-          <div className="space-y-3">
-            {formData.options.map((option: string, index: number) => (
-              <motion.div
-                key={index}
-                className="flex items-center space-x-4"
-                whileHover={{ x: 5 }}
-              >
-                <motion.input
-                  type="radio"
-                  name="correctAnswer"
-                  checked={formData.correctAnswer === index}
-                  onChange={() =>
-                    setFormData({ ...formData, correctAnswer: index })
-                  }
-                  className="w-5 h-5 text-green-500 focus:ring-green-400"
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                />
-                <div className="w-8 h-8 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                  {String.fromCharCode(65 + index)}
-                </div>
-                <motion.input
-                  type="text"
-                  className="flex-1 p-4 bg-slate-800/50 border border-slate-600 rounded-xl focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-white placeholder-gray-400 font-medium"
-                  value={option}
-                  onChange={(e) => handleOptionChange(index, e.target.value)}
-                  placeholder={`Option ${index + 1}...`}
-                  required
-                  whileFocus={{ scale: 1.02 }}
-                />
-              </motion.div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="text-gray-300 mb-3 font-bold text-sm flex items-center">
-            <FaStar className="mr-2 text-yellow-400" />
-            VICTORY EXPLANATION
-          </label>
-          <motion.textarea
-            className="w-full p-4 bg-slate-800/50 border border-slate-600 rounded-xl focus:ring-2 focus:ring-yellow-400 focus:border-transparent text-white placeholder-gray-400 font-medium resize-none"
-            value={formData.explanation || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, explanation: e.target.value })
-            }
-            placeholder="Explain why this answer conquers all..."
-            required
-            rows={4}
-            whileFocus={{ scale: 1.02 }}
-          />
-        </div>
-
-        <div className="flex justify-end space-x-4 pt-4">
-          <GameButton onClick={onCancel} variant="secondary">
-            <FaTimes className="mr-2" />
-            RETREAT
-          </GameButton>
-          {onContinue && (
-            <GameButton
-              onClick={() => {
-                onSave(formData);
-                onContinue();
-              }}
-              variant="secondary"
-            >
-              <FaPlus className="mr-2" />
-              FORGE & CONTINUE
-            </GameButton>
-          )}
-          <GameButton type="submit" variant="success">
-            <FaSave className="mr-2" />
-            COMPLETE FORGE
-          </GameButton>
-        </div>
-      </form>
-    </motion.div>
-  );
-};
-
-const QuizManager = () => {
-  const {
-    quizPacks,
-    shopPacks,
-    createQuizPack,
-    updateQuizPack,
-    deleteQuizPack,
-    shareToShop,
-    downloadFromShop,
-  } = useQuizManager();
-
-  const [selectedQuizPack, setSelectedQuizPack] = useState<QuizPack | null>(
-    null
-  );
-  const [isEditing, setIsEditing] = useState(false);
-  const [isAddingQuestion, setIsAddingQuestion] = useState(false);
-  const [editingQuestion, setEditingQuestion] = useState<QuizQuestion | null>(
-    null
-  );
-  const [activeTab, setActiveTab] = useState("my-quizzes");
-  const [newQuizPack, setNewQuizPack] = useState<Partial<QuizPack>>({
+  const [formData, setFormData] = useState<FormData>({
     name: "",
     description: "",
     category: "",
-    questions: [],
+    author: "",
   });
-  const [showCreateForm, setShowCreateForm] = useState(false);
 
-  const { addQuestion, updateQuestion, deleteQuestion } = useQuestionManager(
-    selectedQuizPack,
-    (updatedPack) => {
-      updateQuizPack(updatedPack);
-      setSelectedQuizPack(updatedPack);
-    }
-  );
-
-  const handleCreateQuiz = () => {
-    const success = createQuizPack(newQuizPack);
-    if (success) {
-      const createdPack = quizPacks[quizPacks.length - 1];
-      if (createdPack) {
-        setSelectedQuizPack(createdPack);
-        setIsEditing(true);
-      }
-      setNewQuizPack({
-        name: "",
-        description: "",
-        category: "",
-        questions: [],
-      });
-      setShowCreateForm(false);
-    }
-  };
-
-  const handleUpdateQuiz = () => {
-    if (selectedQuizPack) {
-      const success = updateQuizPack(selectedQuizPack);
-      if (success) {
-        setIsEditing(false);
-      }
-    }
-  };
-
-  const handleDeleteQuiz = (id: number) => {
-    const success = deleteQuizPack(id);
-    if (success && selectedQuizPack?.id === id) {
-      setSelectedQuizPack(null);
-    }
-  };
-
-  const getEmptyQuestionTemplate = (): QuizQuestion => ({
-    id: 0,
+  const [questionFormData, setQuestionFormData] = useState({
     question: "",
     options: ["", "", "", ""],
-    correctAnswer: 0,
+    correct_answer: 0,
     explanation: "",
-    imageUrl: "",
+    image_url: "",
   });
 
-  return (
-    <div className="min-h-screen  relative overflow-hidden">
-      {/* Header */}
-      <div className="relative z-10 flex flex-col lg:flex-row justify-between items-center mb-8 p-4 md:p-8">
-        <motion.div
-          className="flex items-center mb-4 lg:mb-0"
-          initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-        >
-          <motion.div
-            className="relative bg-gradient-to-br from-yellow-400 via-orange-500 to-red-500 p-4 rounded-2xl shadow-2xl mr-4"
-            whileHover={{ rotate: [0, -5, 5, 0], scale: 1.1 }}
-            transition={{ duration: 0.5 }}
-          >
-            <FaCrown className="text-white text-3xl" />
-          </motion.div>
-          <div>
-            <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400">
-              QUIZ MASTER
-            </h1>
-            <p className="text-gray-400 text-sm font-semibold tracking-wider">
-              LEVEL UP YOUR KNOWLEDGE
-            </p>
-          </div>
-        </motion.div>
+  // Lấy danh mục từ database
+  const categories = [...new Set(quizPacks.map((pack) => pack.category))];
 
-        {/* Tab Navigation */}
+  // Animation variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.08,
+        delayChildren: 0.1,
+      },
+    },
+  };
+
+  const cardVariants: Variants = {
+    hidden: {
+      opacity: 0,
+      y: 50,
+      scale: 0.9,
+    },
+    visible: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: {
+        type: "spring" as const,
+        stiffness: 120,
+        damping: 20,
+        duration: 0.8,
+      },
+    },
+    hover: {
+      y: -10,
+      scale: 1.03,
+      transition: {
+        type: "spring" as const,
+        stiffness: 400,
+        damping: 25,
+      },
+    },
+  };
+
+  // Count questions for a quiz pack
+  const countQuestions = async (packId: number): Promise<number> => {
+    try {
+      const { data, error } = await supabase
+        .from("quiz_questions")
+        .select("id", { count: "exact" })
+        .eq("quiz_pack_id", packId);
+
+      if (error) throw error;
+      return data?.length || 0;
+    } catch (error) {
+      console.error("Error counting questions:", error);
+      return 0;
+    }
+  };
+
+  // Update question count for a quiz pack
+  const updateQuestionCount = async (packId: number): Promise<void> => {
+    try {
+      const questionCount = await countQuestions(packId);
+      const { error } = await supabase
+        .from("quiz_packs")
+        .update({ question_count: questionCount })
+        .eq("id", packId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error("Error updating question count:", error);
+    }
+  };
+
+  // Fetch quiz packs and update question counts
+  const fetchQuizPacks = async (): Promise<void> => {
+    try {
+      const { data, error } = await supabase
+        .from("quiz_packs")
+        .select("*")
+        .order("id", { ascending: false });
+
+      if (error) throw error;
+
+      // Update question counts for all packs
+      const updatedPacks = await Promise.all(
+        (data || []).map(async (pack) => {
+          const questionCount = await countQuestions(pack.id);
+          if (questionCount !== pack.question_count) {
+            await updateQuestionCount(pack.id);
+            return { ...pack, question_count: questionCount };
+          }
+          return pack;
+        })
+      );
+
+      setQuizPacks(updatedPacks);
+    } catch (error) {
+      toast.error("Không thể tải quiz packs");
+      console.error("Error fetching quiz packs:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch questions for a specific pack
+  const fetchQuestions = async (packId: number): Promise<void> => {
+    try {
+      const { data, error } = await supabase
+        .from("quiz_questions")
+        .select("*")
+        .eq("quiz_pack_id", packId)
+        .order("id", { ascending: true });
+
+      if (error) throw error;
+      setQuestions(data || []);
+    } catch (error) {
+      toast.error("Không thể tải câu hỏi");
+      console.error("Error fetching questions:", error);
+    }
+  };
+
+  // Create or update quiz pack
+  const saveQuizPack = async (): Promise<void> => {
+    try {
+      const packData = {
+        name: formData.name,
+        description: formData.description,
+        question_count: 0, // Will be updated automatically
+        category: formData.category,
+        author: formData.author || "community", // Default to community
+      };
+
+      let result;
+      if (editingPack) {
+        result = await supabase
+          .from("quiz_packs")
+          .update(packData)
+          .eq("id", editingPack.id);
+      } else {
+        result = await supabase.from("quiz_packs").insert([packData]);
+      }
+
+      if (result.error) throw result.error;
+
+      toast.success(
+        editingPack ? "Đã cập nhật quiz pack!" : "Đã tạo quiz pack mới!"
+      );
+      resetForm();
+      fetchQuizPacks();
+    } catch (error) {
+      toast.error("Không thể lưu quiz pack");
+      console.error("Error saving quiz pack:", error);
+    }
+  };
+
+  // Delete quiz pack
+  const deleteQuizPack = async (id: number, author: string): Promise<void> => {
+    if (author === "official") {
+      toast.error("Không thể xóa quiz pack chính thức");
+      return;
+    }
+
+    if (!window.confirm("Bạn có chắc chắn muốn xóa quiz pack này?")) {
+      return;
+    }
+
+    try {
+      // First delete all questions in the pack
+      await supabase
+        .from("quiz_questions")
+        .delete()
+        .eq("quiz_pack_id", id);
+
+      // Then delete the pack
+      const { error } = await supabase.from("quiz_packs").delete().eq("id", id);
+
+      if (error) throw error;
+
+      toast.success("Đã xóa quiz pack!");
+      fetchQuizPacks();
+    } catch (error) {
+      toast.error("Không thể xóa quiz pack");
+      console.error("Error deleting quiz pack:", error);
+    }
+  };
+
+  // Reset form
+  const resetForm = (): void => {
+    setFormData({
+      name: "",
+      description: "",
+      category: "",
+      author: "",
+    });
+    setCategoryInput("");
+    setShowCategoryInput(false);
+    setEditingPack(null);
+    setShowCreateForm(false);
+  };
+
+  // Open form for editing
+  const openEditForm = (pack: QuizPack): void => {
+    if (pack.author === "official") {
+      toast.error("Không thể chỉnh sửa quiz pack chính thức");
+      return;
+    }
+    setEditingPack(pack);
+    setFormData({
+      name: pack.name,
+      description: pack.description,
+      category: pack.category,
+      author: pack.author,
+    });
+    setCategoryInput(pack.category);
+    setShowCreateForm(true);
+  };
+
+  // Toggle questions view
+  const toggleQuestions = async (packId: number): Promise<void> => {
+    if (viewingQuestions === packId) {
+      setViewingQuestions(null);
+      setQuestions([]);
+      setShowQuestionForm(false);
+      setEditingQuestion(null);
+    } else {
+      setViewingQuestions(packId);
+      await fetchQuestions(packId);
+    }
+  };
+
+  // Toggle like
+  const toggleLike = (packId: number): void => {
+    const newLiked = new Set(likedPacks);
+    if (newLiked.has(packId)) {
+      newLiked.delete(packId);
+    } else {
+      newLiked.add(packId);
+    }
+    setLikedPacks(newLiked);
+  };
+
+  // Handle category selection
+  const handleCategorySelect = (category: string): void => {
+    if (category === "new") {
+      setShowCategoryInput(true);
+      setCategoryInput("");
+      setFormData({ ...formData, category: "" });
+    } else {
+      setFormData({ ...formData, category });
+      setCategoryInput(category);
+      setShowCategoryInput(false);
+    }
+  };
+
+  // Handle custom category input
+  const handleCategoryInputChange = (e: ChangeEvent<HTMLInputElement>): void => {
+    const value = e.target.value;
+    setCategoryInput(value);
+    setFormData({ ...formData, category: value });
+  };
+
+  // Handle form submission
+  const handleSubmit = (e: FormEvent<HTMLFormElement>): void => {
+    e.preventDefault();
+    saveQuizPack();
+  };
+
+  // Reset question form
+  const resetQuestionForm = (): void => {
+    setQuestionFormData({
+      question: "",
+      options: ["", "", "", ""],
+      correct_answer: 0,
+      explanation: "",
+      image_url: "",
+    });
+    setEditingQuestion(null);
+  };
+
+  // Handle question input change
+  const handleQuestionInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): void => {
+    const { name, value } = e.target;
+    setQuestionFormData({ ...questionFormData, [name]: value });
+  };
+
+  // Handle option change
+  const handleOptionChange = (index: number, value: string): void => {
+    const newOptions = [...questionFormData.options];
+    newOptions[index] = value;
+    setQuestionFormData({ ...questionFormData, options: newOptions });
+  };
+
+  // Save question
+  const saveQuestion = async (): Promise<void> => {
+    if (!viewingQuestions) return;
+
+    try {
+      const questionData = {
+        quiz_pack_id: viewingQuestions,
+        question: questionFormData.question,
+        options: questionFormData.options,
+        correct_answer: questionFormData.correct_answer,
+        explanation: questionFormData.explanation || null,
+        image_url: questionFormData.image_url || null,
+      };
+
+      let result;
+      if (editingQuestion) {
+        result = await supabase
+          .from("quiz_questions")
+          .update(questionData)
+          .eq("id", editingQuestion.id);
+      } else {
+        result = await supabase.from("quiz_questions").insert([questionData]);
+      }
+
+      if (result.error) throw result.error;
+
+      toast.success(editingQuestion ? "Đã cập nhật câu hỏi!" : "Đã thêm câu hỏi mới!");
+      resetQuestionForm();
+      fetchQuestions(viewingQuestions);
+      updateQuestionCount(viewingQuestions);
+    } catch (error) {
+      toast.error("Không thể lưu câu hỏi");
+      console.error("Error saving question:", error);
+    }
+  };
+
+  // Delete question
+  const deleteQuestion = async (id: number): Promise<void> => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa câu hỏi này?")) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("quiz_questions")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      toast.success("Đã xóa câu hỏi!");
+      if (viewingQuestions) {
+        fetchQuestions(viewingQuestions);
+        updateQuestionCount(viewingQuestions);
+      }
+    } catch (error) {
+      toast.error("Không thể xóa câu hỏi");
+      console.error("Error deleting question:", error);
+    }
+  };
+
+  // Edit question
+  const editQuestion = (question: QuizQuestion): void => {
+    setEditingQuestion(question);
+    setQuestionFormData({
+      question: question.question,
+      options: [...question.options],
+      correct_answer: question.correct_answer,
+      explanation: question.explanation || "",
+      image_url: question.image_url || "",
+    });
+    setShowQuestionForm(true);
+  };
+
+  useEffect(() => {
+    fetchQuizPacks();
+  }, []);
+
+  // Filter quiz packs
+  const filteredPacks = quizPacks.filter((pack) => {
+    const matchesSearch =
+      pack.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      pack.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      pack.author.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesCategory =
+      selectedCategory === "all" || pack.category === selectedCategory;
+    
+    const matchesAuthor =
+      selectedAuthor === "all" ||
+      (selectedAuthor === "official" && pack.author === "official") ||
+      (selectedAuthor === "community" && pack.author !== "official");
+
+    return matchesSearch && matchesCategory && matchesAuthor;
+  });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center">
         <motion.div
-          className="relative bg-slate-800/50 backdrop-blur-lg border border-slate-700 rounded-2xl p-2 flex shadow-2xl"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.3 }}
+          animate={{
+            rotate: 360,
+            scale: [1, 1.3, 1],
+          }}
+          transition={{
+            duration: 2,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+          className="relative"
         >
-          <GameButton
-            className={`relative flex items-center px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 ${
-              activeTab === "my-quizzes"
-                ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/25"
-                : "bg-transparent text-gray-300 hover:text-white hover:bg-slate-700/50"
-            }`}
-            onClick={() => setActiveTab("my-quizzes")}
-          >
-            <FaGamepad className="mr-2" />
-            MY QUIZZES
-          </GameButton>
-          <GameButton
-            className={`relative flex items-center px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 ${
-              activeTab === "shop"
-                ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/25"
-                : "bg-transparent text-gray-300 hover:text-white hover:bg-slate-700/50"
-            }`}
-            onClick={() => setActiveTab("shop")}
-          >
-            <FaStore className="mr-2" />
-            QUIZ STORE
-          </GameButton>
+          <div className="w-20 h-20 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
+          <FiBookOpen className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 text-white" />
         </motion.div>
       </div>
+    );
+  }
 
-      {/* Main Content */}
-      <div className="relative z-10 max-w-7xl mx-auto px-4">
-        <AnimatePresence mode="wait">
-          {activeTab === "my-quizzes" ? (
-            <motion.div
-              key="my-quizzes"
-              initial={ANIMATION_VARIANTS.fadeIn.initial}
-              animate={ANIMATION_VARIANTS.fadeIn.animate}
-              exit={ANIMATION_VARIANTS.fadeIn.exit}
-              transition={{ duration: 0.4 }}
-              className="bg-slate-800/30 backdrop-blur-xl rounded-3xl border border-slate-700/50 shadow-2xl overflow-hidden"
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 relative overflow-hidden">
+      {/* Background Elements */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-pink-500/20 to-purple-500/20 rounded-full blur-3xl"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-full blur-3xl"></div>
+      </div>
+
+      <div className="relative z-10 p-4 md:p-8">
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+              color: "#f1f5f9",
+              border: "1px solid rgba(148, 163, 184, 0.2)",
+              borderRadius: "12px",
+              backdropFilter: "blur(10px)",
+            },
+          }}
+        />
+
+        <div className="max-w-7xl mx-auto">
+          {/* Controls */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="mb-12 flex flex-col lg:flex-row gap-6 items-center justify-between"
+          >
+            <div className="flex flex-col sm:flex-row gap-4 flex-1 w-full lg:w-auto">
+              {/* Search */}
+              <div className="relative flex-1 max-w-md">
+                <FiSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm quiz..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 transition-all duration-300"
+                />
+              </div>
+
+              {/* Category Filter */}
+              <div className="relative">
+                <FiFilter className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 w-5 h-5" />
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="pl-12 pr-10 py-4 bg-white/10 border border-white/20 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 appearance-none cursor-pointer min-w-[180px]"
+                >
+                  <option value="all" className="bg-gray-800">
+                    Tất cả danh mục
+                  </option>
+                  {categories.map((category) => (
+                    <option
+                      key={category}
+                      value={category}
+                      className="bg-gray-800"
+                    >
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Author Filter */}
+              <div className="relative">
+                <FiUser className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 w-5 h-5" />
+                <select
+                  value={selectedAuthor}
+                  onChange={(e) => setSelectedAuthor(e.target.value as AuthorFilter)}
+                  className="pl-12 pr-10 py-4 bg-white/10 border border-white/20 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 appearance-none cursor-pointer min-w-[160px]"
+                >
+                  <option value="all" className="bg-gray-800">
+                    Tất cả tác giả
+                  </option>
+                  <option value="official" className="bg-gray-800">
+                    Chính thức
+                  </option>
+                  <option value="community" className="bg-gray-800">
+                    Cộng đồng
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            {/* Add Button */}
+            <motion.button
+              whileHover={{
+                scale: 1.05,
+                boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
+              }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                resetForm();
+                setShowCreateForm(true);
+              }}
+              className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-2xl font-bold hover:from-pink-600 hover:to-purple-700 transition-all duration-300 shadow-2xl"
             >
-              <div className="flex flex-col xl:flex-row h-full">
-                {/* Sidebar - Quiz List */}
-                <div className="w-full xl:w-1/3 bg-gradient-to-b from-slate-800/50 to-slate-900/50 p-6 border-r border-slate-700/50">
-                  <div className="mb-6">
-                    {showCreateForm ? (
-                      <motion.div
-                        initial={ANIMATION_VARIANTS.scaleIn.initial}
-                        animate={ANIMATION_VARIANTS.scaleIn.animate}
-                        className="space-y-4 bg-slate-700/30 backdrop-blur-lg p-6 rounded-2xl border border-slate-600/50"
-                      >
-                        <motion.input
-                          type="text"
-                          placeholder="Enter quiz name..."
-                          className="w-full p-4 bg-slate-800/50 border border-slate-600 rounded-xl focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-white placeholder-gray-400 font-medium"
-                          value={newQuizPack.name}
-                          onChange={(e) =>
-                            setNewQuizPack({
-                              ...newQuizPack,
-                              name: e.target.value,
-                            })
-                          }
-                          whileFocus={{ scale: 1.02 }}
-                        />
-                        <motion.input
-                          type="text"
-                          placeholder="Description..."
-                          className="w-full p-4 bg-slate-800/50 border border-slate-600 rounded-xl focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-white placeholder-gray-400 font-medium"
-                          value={newQuizPack.description}
-                          onChange={(e) =>
-                            setNewQuizPack({
-                              ...newQuizPack,
-                              description: e.target.value,
-                            })
-                          }
-                          whileFocus={{ scale: 1.02 }}
-                        />
-                        <motion.input
-                          type="text"
-                          placeholder="Category..."
-                          className="w-full p-4 bg-slate-800/50 border border-slate-600 rounded-xl focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-white placeholder-gray-400 font-medium"
-                          value={newQuizPack.category}
-                          onChange={(e) =>
-                            setNewQuizPack({
-                              ...newQuizPack,
-                              category: e.target.value,
-                            })
-                          }
-                          whileFocus={{ scale: 1.02 }}
-                        />
-                        <div className="flex space-x-3">
-                          <GameButton
-                            variant="success"
-                            onClick={handleCreateQuiz}
-                            className="flex-1"
-                          >
-                            CREATE
-                          </GameButton>
-                          <GameButton
-                            onClick={() => setShowCreateForm(false)}
-                            className="flex-1 bg-slate-600 text-white"
-                          >
-                            CANCEL
-                          </GameButton>
-                        </div>
-                      </motion.div>
+              <FiPlus className="w-5 h-5" />
+              Tạo Quiz Mới
+            </motion.button>
+          </motion.div>
+
+          {/* Create/Edit Form */}
+          {showCreateForm && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="bg-white/10 border border-white/20 rounded-3xl p-8 mb-12"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-3xl font-bold text-white mb-2">
+                    {editingPack ? "Chỉnh sửa Quiz Pack" : "Tạo Quiz Pack Mới"}
+                  </h2>
+                  <p className="text-white/70">
+                    {editingPack
+                      ? "Cập nhật thông tin quiz pack"
+                      : "Tạo một bộ câu hỏi mới thú vị"}
+                  </p>
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.1, rotate: 90 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => resetForm()}
+                  className="p-3 text-white/70 hover:text-white rounded-2xl hover:bg-white/10 transition-all duration-300"
+                >
+                  <FiX className="w-6 h-6" />
+                </motion.button>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div>
+                  <label className="block text-white/90 font-semibold mb-3">
+                    Tên Quiz Pack
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                    className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 transition-all duration-300"
+                    placeholder="VD: Kiến thức lịch sử Việt Nam"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-white/90 font-semibold mb-3">
+                    Mô tả
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) =>
+                      setFormData({ ...formData, description: e.target.value })
+                    }
+                    className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 resize-none transition-all duration-300"
+                    rows={4}
+                    placeholder="Mô tả ngắn gọn về nội dung quiz pack của bạn..."
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Category Selection */}
+                  <div>
+                    <label className="block text-white/90 font-semibold mb-3">
+                      Danh mục
+                    </label>
+                    {!showCategoryInput ? (
+                      <div className="relative">
+                        <select
+                          value={formData.category || ""}
+                          onChange={(e) => handleCategorySelect(e.target.value)}
+                          className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 appearance-none cursor-pointer"
+                          required
+                        >
+                          <option value="" className="bg-gray-800">
+                            Chọn danh mục
+                          </option>
+                          {categories.map((category) => (
+                            <option
+                              key={category}
+                              value={category}
+                              className="bg-gray-800"
+                            >
+                              {category}
+                            </option>
+                          ))}
+                          <option value="new" className="bg-gray-800 font-bold">
+                            + Tạo danh mục mới
+                          </option>
+                        </select>
+                        <FiChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/60 w-5 h-5 pointer-events-none" />
+                      </div>
                     ) : (
-                      <GameButton
-                        className="w-full bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 text-white py-4 rounded-2xl font-bold text-lg flex items-center justify-center shadow-2xl shadow-purple-500/25 relative overflow-hidden"
-                        onClick={() => setShowCreateForm(true)}
-                      >
-                        <FaRocket className="mr-3 text-xl" />
-                        CREATE NEW QUEST
-                      </GameButton>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={categoryInput}
+                          onChange={handleCategoryInputChange}
+                          className="flex-1 px-4 py-4 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 transition-all duration-300"
+                          placeholder="Nhập tên danh mục mới"
+                          autoFocus
+                        />
+                        <motion.button
+                          type="button"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => setShowCategoryInput(false)}
+                          className="px-4 py-4 bg-white/10 text-white rounded-2xl hover:bg-white/20 transition-all duration-300"
+                        >
+                          <FiX className="w-5 h-5" />
+                        </motion.button>
+                      </div>
                     )}
                   </div>
 
-                  <h2 className="text-2xl font-black text-white mb-6 flex items-center">
-                    <FaTrophy className="mr-3 text-yellow-400" />
-                    YOUR ARSENAL
-                  </h2>
-
-                  {quizPacks.length === 0 ? (
-                    <motion.div
-                      className="text-center py-12"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                    >
-                      <AnimatedIcon
-                        icon={FaQuestionCircle}
-                        className="text-6xl text-purple-400 mx-auto mb-6"
-                      />
-                      <p className="text-gray-400 mb-6 text-lg">
-                        No quests available. Create your first challenge!
-                      </p>
-                      <GameButton
-                        onClick={() => setShowCreateForm(true)}
-                        variant="primary"
-                      >
-                        START YOUR JOURNEY
-                      </GameButton>
-                    </motion.div>
-                  ) : (
-                    <div className="space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto pr-2">
-                      <AnimatePresence>
-                        {quizPacks.map((pack, index) => (
-                          <QuizCard
-                            key={pack.id}
-                            pack={pack}
-                            isSelected={selectedQuizPack?.id === pack.id}
-                            onSelect={() => setSelectedQuizPack(pack)}
-                            onDelete={() => handleDeleteQuiz(pack.id)}
-                            index={index}
-                          />
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  )}
+                  {/* Author */}
+                  <div>
+                    <label className="block text-white/90 font-semibold mb-3">
+                      Tác giả
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.author}
+                      onChange={(e) =>
+                        setFormData({ ...formData, author: e.target.value })
+                      }
+                      className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 transition-all duration-300"
+                      placeholder="Tên của bạn (mặc định: community)"
+                    />
+                  </div>
                 </div>
 
-                {/* Main Content - Quiz Details */}
-                <div className="w-full xl:w-2/3 p-6 bg-slate-800/20">
-                  {selectedQuizPack ? (
-                    <div>
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 space-y-4 sm:space-y-0">
-                        <h2 className="text-3xl font-black text-white">
-                          {isEditing ? (
-                            <motion.input
-                              type="text"
-                              className="border-b-2 border-cyan-400 focus:outline-none bg-transparent font-black text-3xl text-white w-full"
-                              value={selectedQuizPack.name}
-                              onChange={(e) =>
-                                setSelectedQuizPack({
-                                  ...selectedQuizPack,
-                                  name: e.target.value,
-                                })
-                              }
-                              whileFocus={{ scale: 1.02 }}
-                            />
-                          ) : (
-                            <span className="bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
-                              {selectedQuizPack.name}
-                            </span>
-                          )}
-                        </h2>
-                        <div className="flex space-x-3 flex-wrap">
-                          {isEditing ? (
-                            <>
-                              <GameButton
-                                onClick={handleUpdateQuiz}
-                                variant="success"
-                              >
-                                <FaSave className="mr-2" />
-                                SAVE
-                              </GameButton>
-                              <GameButton onClick={() => setIsEditing(false)}>
-                                <FaTimes className="mr-2" />
-                                CANCEL
-                              </GameButton>
-                            </>
-                          ) : (
-                            <>
-                              <GameButton
-                                onClick={() => setIsEditing(true)}
-                                variant="primary"
-                              >
-                                <FaEdit className="mr-2" />
-                                EDIT
-                              </GameButton>
-                              <GameButton
-                                onClick={() => shareToShop(selectedQuizPack)}
-                                variant="secondary"
-                              >
-                                <FaShare className="mr-2" />
-                                SHARE
-                              </GameButton>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {isEditing ? (
-                        <motion.div
-                          className="space-y-4 mb-8"
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                        >
-                          <div>
-                            <label className="text-gray-300 mb-2 font-bold text-sm block">
-                              DESCRIPTION
-                            </label>
-                            <motion.input
-                              type="text"
-                              className="w-full p-4 bg-slate-700/50 border border-slate-600 rounded-xl focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-white font-medium"
-                              value={selectedQuizPack.description}
-                              onChange={(e) =>
-                                setSelectedQuizPack({
-                                  ...selectedQuizPack,
-                                  description: e.target.value,
-                                })
-                              }
-                              whileFocus={{ scale: 1.02 }}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-gray-300 mb-2 font-bold text-sm block">
-                              CATEGORY
-                            </label>
-                            <motion.input
-                              type="text"
-                              className="w-full p-4 bg-slate-700/50 border border-slate-600 rounded-xl focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-white font-medium"
-                              value={selectedQuizPack.category}
-                              onChange={(e) =>
-                                setSelectedQuizPack({
-                                  ...selectedQuizPack,
-                                  category: e.target.value,
-                                })
-                              }
-                              whileFocus={{ scale: 1.02 }}
-                            />
-                          </div>
-                        </motion.div>
-                      ) : (
-                        <div className="mb-8">
-                          <p className="text-gray-300 text-lg mb-4">
-                            {selectedQuizPack.description}
-                          </p>
-                          <motion.span
-                            className="inline-block bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-300 px-4 py-2 rounded-full border border-purple-500/30 font-bold text-sm"
-                            whileHover={{ scale: 1.05 }}
-                          >
-                            {selectedQuizPack.category}
-                          </motion.span>
-                        </div>
-                      )}
-
-                      <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-2xl font-black text-white flex items-center">
-                          <FaFire className="mr-3 text-orange-400" />
-                          BATTLE QUESTIONS
-                        </h3>
-                        {isEditing && (
-                          <GameButton
-                            onClick={() => {
-                              setIsAddingQuestion(true);
-                              setEditingQuestion(getEmptyQuestionTemplate());
-                            }}
-                            className="bg-gradient-to-r from-yellow-500 to-orange-500"
-                          >
-                            <FaPlus className="mr-2" />
-                            ADD CHALLENGE
-                          </GameButton>
-                        )}
-                      </div>
-
-                      {/* Question Form */}
-                      {(isAddingQuestion || editingQuestion) && (
-                        <QuestionForm
-                          question={
-                            editingQuestion || getEmptyQuestionTemplate()
-                          }
-                          onSave={(question) => {
-                            if (editingQuestion && editingQuestion.id !== 0) {
-                              updateQuestion(question);
-                            } else {
-                              addQuestion(question);
-                            }
-                            setIsAddingQuestion(false);
-                            setEditingQuestion(null);
-                          }}
-                          onCancel={() => {
-                            setIsAddingQuestion(false);
-                            setEditingQuestion(null);
-                          }}
-                          onContinue={() => {
-                            setEditingQuestion(getEmptyQuestionTemplate());
-                          }}
-                        />
-                      )}
-
-                      {/* Questions List */}
-                      <div className="space-y-6 max-h-[calc(100vh-500px)] overflow-y-auto pr-2">
-                        <AnimatePresence>
-                          {selectedQuizPack.questions.map((question, index) => (
-                            <motion.div
-                              key={question.id}
-                              initial={{ opacity: 0, y: 20 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -20 }}
-                              transition={{ duration: 0.3, delay: index * 0.1 }}
-                              className="relative bg-slate-700/30 backdrop-blur-lg border border-slate-600/50 rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all duration-300"
-                            >
-                              <div className="flex justify-between items-start mb-4">
-                                <div className="flex items-center space-x-3">
-                                  <motion.div
-                                    className="w-8 h-8 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm"
-                                    whileHover={{ scale: 1.1 }}
-                                  >
-                                    {index + 1}
-                                  </motion.div>
-                                  <h4 className="font-bold text-white text-lg">
-                                    {question.question}
-                                  </h4>
-                                </div>
-                                {isEditing && (
-                                  <div className="flex space-x-3">
-                                    <motion.button
-                                      whileHover={{ scale: 1.1 }}
-                                      whileTap={{ scale: 0.9 }}
-                                      className="text-blue-400 hover:text-blue-300 p-2"
-                                      onClick={() =>
-                                        setEditingQuestion(question)
-                                      }
-                                    >
-                                      <FaEdit className="text-lg" />
-                                    </motion.button>
-                                    <motion.button
-                                      whileHover={{ scale: 1.1 }}
-                                      whileTap={{ scale: 0.9 }}
-                                      className="text-red-400 hover:text-red-300 p-2"
-                                      onClick={() =>
-                                        deleteQuestion(question.id)
-                                      }
-                                    >
-                                      <FaTrash className="text-lg" />
-                                    </motion.button>
-                                  </div>
-                                )}
-                              </div>
-
-                              {question.imageUrl && (
-                                <div className="mb-4">
-                                  <motion.img
-                                    src={question.imageUrl}
-                                    alt="Question illustration"
-                                    className="w-full h-48 object-cover rounded-xl shadow-lg"
-                                    whileHover={{ scale: 1.02 }}
-                                  />
-                                </div>
-                              )}
-
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                                {question.options.map(
-                                  (option: string, optIndex: number) => (
-                                    <motion.div
-                                      key={optIndex}
-                                      className={`p-4 rounded-xl border flex items-center font-medium transition-all duration-300 ${
-                                        optIndex === question.correctAnswer
-                                          ? "bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-400/50 text-green-300"
-                                          : "bg-slate-600/30 border-slate-500/50 text-gray-300"
-                                      }`}
-                                      whileHover={{ scale: 1.02 }}
-                                    >
-                                      {optIndex === question.correctAnswer && (
-                                        <motion.div
-                                          initial={{ scale: 0 }}
-                                          animate={{ scale: 1 }}
-                                          className="mr-3"
-                                        >
-                                          <FaCheck className="text-green-400" />
-                                        </motion.div>
-                                      )}
-                                      <span className="w-6 h-6 bg-slate-500/50 rounded-full flex items-center justify-center text-xs font-bold mr-3">
-                                        {String.fromCharCode(65 + optIndex)}
-                                      </span>
-                                      {option}
-                                    </motion.div>
-                                  )
-                                )}
-                              </div>
-
-                              <motion.div
-                                className="bg-slate-600/30 p-4 rounded-xl border border-slate-500/50"
-                                whileHover={{ scale: 1.01 }}
-                              >
-                                <div className="flex items-center mb-2">
-                                  <FaStar className="text-yellow-400 mr-2" />
-                                  <span className="font-bold text-yellow-400 text-sm">
-                                    EXPLANATION
-                                  </span>
-                                </div>
-                                <p className="text-gray-300 leading-relaxed">
-                                  {question.explanation}
-                                </p>
-                              </motion.div>
-                            </motion.div>
-                          ))}
-                        </AnimatePresence>
-
-                        {selectedQuizPack.questions.length === 0 && (
-                          <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="text-center py-16 bg-slate-700/20 rounded-2xl border border-slate-600/30 backdrop-blur-lg"
-                          >
-                            <AnimatedIcon
-                              icon={FaQuestionCircle}
-                              className="text-6xl mx-auto mb-6 text-purple-400"
-                            />
-                            <p className="text-gray-400 text-xl font-medium mb-6">
-                              No challenges in this quest yet
-                            </p>
-                            {isEditing && (
-                              <GameButton
-                                onClick={() => {
-                                  setIsAddingQuestion(true);
-                                  setEditingQuestion(
-                                    getEmptyQuestionTemplate()
-                                  );
-                                }}
-                                variant="secondary"
-                                className="text-lg"
-                              >
-                                CREATE FIRST CHALLENGE
-                              </GameButton>
-                            )}
-                          </motion.div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <motion.div
-                      className="text-center py-20"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                    >
-                      <motion.div
-                        animate={{
-                          scale: [1, 1.1, 1],
-                          rotate: [0, 5, -5, 0],
-                        }}
-                        transition={{
-                          duration: 4,
-                          repeat: Infinity,
-                          ease: "easeInOut",
-                        }}
-                        className="text-purple-400 mb-8"
-                      >
-                        <FaGamepad className="h-24 w-24 mx-auto" />
-                      </motion.div>
-                      <h3 className="text-3xl font-black text-white mb-4">
-                        CHOOSE YOUR QUEST
-                      </h3>
-                      <p className="text-gray-400 text-lg">
-                        {quizPacks.length === 0
-                          ? "Begin your journey by creating your first quiz!"
-                          : "Select a quest from your arsenal to continue"}
-                      </p>
-                    </motion.div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="shop"
-              initial={ANIMATION_VARIANTS.fadeIn.initial}
-              animate={ANIMATION_VARIANTS.fadeIn.animate}
-              exit={ANIMATION_VARIANTS.fadeIn.exit}
-              transition={{ duration: 0.4 }}
-              className="bg-slate-800/30 backdrop-blur-xl rounded-3xl border border-slate-700/50 shadow-2xl p-8"
-            >
-              <div className="flex items-center mb-8">
-                <motion.div
-                  animate={{ rotate: [0, 10, -10, 0] }}
-                  transition={{ duration: 3, repeat: Infinity }}
-                  className="mr-4"
-                >
-                  <FaStore className="text-4xl text-purple-400" />
-                </motion.div>
-                <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
-                  QUIZ MARKETPLACE
-                </h2>
-              </div>
-
-              {shopPacks.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-                  {shopPacks.map((pack, index) => (
-                    <motion.div
-                      key={pack.id}
-                      initial={{ opacity: 0, scale: 0.8, y: 20 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      transition={{ duration: 0.4, delay: index * 0.1 }}
-                      whileHover={{ y: -8, scale: 1.02 }}
-                      className="relative bg-gradient-to-br from-slate-700/30 to-slate-800/30 backdrop-blur-lg border border-slate-600/50 rounded-2xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300"
-                    >
-                      {pack.questions[0]?.imageUrl && (
-                        <div className="h-48 overflow-hidden relative">
-                          <motion.img
-                            src={pack.questions[0].imageUrl}
-                            alt={pack.name}
-                            className="w-full h-full object-cover"
-                            whileHover={{ scale: 1.1 }}
-                            transition={{ duration: 0.3 }}
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/50 to-transparent" />
-                        </div>
-                      )}
-                      <div className="p-6">
-                        <div className="flex justify-between items-start mb-3">
-                          <h3 className="font-black text-white text-xl">
-                            {pack.name}
-                          </h3>
-                          <motion.span
-                            className="bg-gradient-to-r from-yellow-500 to-orange-500 text-slate-900 text-xs font-black px-3 py-1 rounded-full"
-                            whileHover={{ scale: 1.1 }}
-                          >
-                            {pack.questionCount} Q
-                          </motion.span>
-                        </div>
-                        <p className="text-gray-300 mb-6 line-clamp-2">
-                          {pack.description}
-                        </p>
-                        <div className="flex justify-between items-center">
-                          <motion.span
-                            className="text-xs bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-300 px-3 py-1 rounded-full border border-purple-500/30 font-bold"
-                            whileHover={{ scale: 1.05 }}
-                          >
-                            {pack.category}
-                          </motion.span>
-                          <GameButton
-                            onClick={() => downloadFromShop(pack)}
-                            variant="success"
-                          >
-                            <FaDownload className="mr-2" />
-                            ACQUIRE
-                          </GameButton>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              ) : (
-                <motion.div
-                  className="text-center py-20"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                >
-                  <motion.div
-                    animate={{
-                      scale: [1, 1.1, 1],
-                      rotate: [0, 10, -10, 0],
-                    }}
-                    transition={{
-                      duration: 4,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
+                <div className="flex gap-4 pt-6">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    type="submit"
+                    className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-2xl font-bold hover:from-purple-600 hover:to-pink-700 transition-all duration-300 shadow-xl"
                   >
-                    <FaStore className="text-8xl text-purple-400 mx-auto mb-6" />
-                  </motion.div>
-                  <h3 className="text-3xl font-black text-white mb-4">
-                    MARKETPLACE EMPTY
-                  </h3>
-                  <p className="text-gray-400 text-lg">
-                    No quests available for download yet. Share your creations
-                    to populate the marketplace!
-                  </p>
-                </motion.div>
-              )}
+                    <FiSave className="w-5 h-5" />
+                    {editingPack ? "Cập nhật" : "Tạo mới"}
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    type="button"
+                    onClick={() => resetForm()}
+                    className="px-8 py-4 bg-white/10 text-white rounded-2xl font-bold hover:bg-white/20 transition-all duration-300"
+                  >
+                    Hủy
+                  </motion.button>
+                </div>
+              </form>
             </motion.div>
           )}
-        </AnimatePresence>
+
+          {/* Quiz Packs Grid */}
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8"
+          >
+            {filteredPacks.map((pack) => (
+              <motion.div
+                key={pack.id}
+                variants={cardVariants}
+                whileHover="hover"
+                className="group relative bg-white/10 border border-white/20 rounded-3xl overflow-hidden shadow-2xl"
+              >
+                {/* Card Header with Gradient */}
+                <div className="h-18 bg-gradient-to-br from-blue-800 to-cyan-500 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-black/20"></div>
+                  <div className="absolute top-4 left-4 flex items-center gap-2">
+                    <span className="px-3 py-1 bg-white/20 rounded-full text-white text-sm font-medium">
+                      {pack.category}
+                    </span>
+                    {pack.author === "official" && (
+                      <span className="px-3 py-1 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full text-white text-xs font-bold">
+                        OFFICIAL
+                      </span>
+                    )}
+                  </div>
+                  <div className="absolute top-4 right-4">
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => toggleLike(pack.id)}
+                      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+                        likedPacks.has(pack.id)
+                          ? "bg-red-500 text-white"
+                          : "bg-white/20 text-white hover:bg-white/30"
+                      }`}
+                    >
+                      <FiHeart
+                        className={`w-5 h-5 ${
+                          likedPacks.has(pack.id) ? "fill-current" : ""
+                        }`}
+                      />
+                    </motion.button>
+                  </div>
+                </div>
+
+                <div className="p-6">
+                  {/* Title and Author */}
+                  <div className="mb-4">
+                    <h3 className="text-xl font-bold text-white mb-2 line-clamp-2 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-pink-300 group-hover:to-purple-300 group-hover:bg-clip-text transition-all duration-300">
+                      {pack.name}
+                    </h3>
+                    <div className="flex items-center justify-between gap-2 text-white/70">
+                      <div className="flex items-center gap-1 text-white/80">
+                        <FiUser className="w-4 h-4" />
+                        <span className="text-sm">
+                          {pack.author === "official" ? "Chính thức" : pack.author || "Cộng đồng"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 text-white/80">
+                        <FiHash className="w-4 h-4" />
+                        <span>{pack.question_count} câu</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <p className="text-white/80 text-sm line-clamp-2 mb-6">
+                    {pack.description}
+                  </p>
+
+                  {/* Actions */}
+                  <div className="flex gap-2 mb-4">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => toggleQuestions(pack.id)}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-300 rounded-xl hover:from-blue-500/30 hover:to-cyan-500/30 transition-all duration-300 border border-blue-500/30"
+                    >
+                      <FiEye className="w-4 h-4" />
+                      {viewingQuestions === pack.id ? "Ẩn" : "Xem"}
+                    </motion.button>
+
+                    {pack.author !== "official" && (
+                      <>
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => openEditForm(pack)}
+                          className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-300 rounded-xl hover:from-green-500/30 hover:to-emerald-500/30 transition-all duration-300 border border-green-500/30"
+                        >
+                          <FiEdit3 className="w-4 h-4" />
+                        </motion.button>
+
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => deleteQuizPack(pack.id, pack.author)}
+                          className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-500/20 to-pink-500/20 text-red-300 rounded-xl hover:from-red-500/30 hover:to-pink-500/30 transition-all duration-300 border border-red-500/30"
+                        >
+                          <FiTrash2 className="w-4 h-4" />
+                        </motion.button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+
+          {/* Empty State */}
+          {filteredPacks.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-center py-20"
+            >
+              <motion.div
+                animate={{
+                  y: [0, -10, 0],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+              >
+                <FiBookOpen className="w-20 h-20 text-white/40 mx-auto mb-6" />
+              </motion.div>
+              <h3 className="text-3xl font-bold text-white/80 mb-4">
+                Không tìm thấy quiz pack nào
+              </h3>
+              <p className="text-white/60 text-lg">
+                Thử điều chỉnh bộ lọc hoặc tạo quiz pack mới
+              </p>
+            </motion.div>
+          )}
+        </div>
       </div>
+
+      {/* Questions Side Panel */}
+      <AnimatePresence>
+        {viewingQuestions !== null && (
+          <motion.div
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 30, stiffness: 300 }}
+            className="fixed inset-y-0 right-0 w-full max-w-4xl bg-gradient-to-b from-indigo-900 to-purple-900 shadow-2xl z-50 overflow-y-auto"
+          >
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-3xl font-bold text-white">
+                  Câu hỏi trong quiz
+                </h2>
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => {
+                    setViewingQuestions(null);
+                    setShowQuestionForm(false);
+                    setEditingQuestion(null);
+                  }}
+                  className="p-3 text-white/70 hover:text-white rounded-2xl hover:bg-white/10 transition-all duration-300"
+                >
+                  <FiX className="w-6 h-6" />
+                </motion.button>
+              </div>
+
+              {/* Question Form */}
+              {quizPacks.find(p => p.id === viewingQuestions)?.author !== "official" && (
+                <div className="mb-8 bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xl font-bold text-white">
+                      {editingQuestion ? "Chỉnh sửa câu hỏi" : "Thêm câu hỏi mới"}
+                    </h3>
+                    {editingQuestion && (
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                          resetQuestionForm();
+                          setShowQuestionForm(!showQuestionForm);
+                        }}
+                        className="px-4 py-2 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all duration-300"
+                      >
+                        {showQuestionForm ? "Hủy" : "Thêm mới"}
+                      </motion.button>
+                    )}
+                  </div>
+
+                  {(showQuestionForm || editingQuestion) && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-white/90 font-semibold mb-2">
+                          Câu hỏi
+                        </label>
+                        <input
+                          type="text"
+                          name="question"
+                          value={questionFormData.question}
+                          onChange={handleQuestionInputChange}
+                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 transition-all duration-300"
+                          placeholder="Nhập câu hỏi..."
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-white/90 font-semibold mb-2">
+                          Hình ảnh (tùy chọn)
+                        </label>
+                        <input
+                          type="text"
+                          name="image_url"
+                          value={questionFormData.image_url}
+                          onChange={handleQuestionInputChange}
+                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 transition-all duration-300"
+                          placeholder="URL hình ảnh..."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-white/90 font-semibold mb-2">
+                          Các lựa chọn
+                        </label>
+                        {questionFormData.options.map((option, index) => (
+                          <div key={index} className="flex items-center gap-2 mb-2">
+                            <button
+                              type="button"
+                              onClick={() => setQuestionFormData({...questionFormData, correct_answer: index})}
+                              className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                                questionFormData.correct_answer === index
+                                  ? "bg-green-500"
+                                  : "bg-white/20"
+                              }`}
+                            >
+                              {questionFormData.correct_answer === index && (
+                                <FiCheck className="w-4 h-4 text-white" />
+                              )}
+                            </button>
+                            <input
+                              type="text"
+                              value={option}
+                              onChange={(e) => handleOptionChange(index, e.target.value)}
+                              className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 transition-all duration-300"
+                              placeholder={`Lựa chọn ${index + 1}...`}
+                              required
+                            />
+                          </div>
+                        ))}
+                        <p className="text-white/60 text-sm mt-2">
+                          Nhấn vào nút tròn để chọn đáp án đúng
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-white/90 font-semibold mb-2">
+                          Giải thích (tùy chọn)
+                        </label>
+                        <textarea
+                          name="explanation"
+                          value={questionFormData.explanation}
+                          onChange={handleQuestionInputChange}
+                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 resize-none transition-all duration-300"
+                          rows={3}
+                          placeholder="Giải thích cho đáp án đúng..."
+                        />
+                      </div>
+
+                      <div className="flex gap-4 pt-4">
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={saveQuestion}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl font-bold hover:from-purple-600 hover:to-pink-700 transition-all duration-300"
+                        >
+                          <FiSave className="w-4 h-4" />
+                          {editingQuestion ? "Cập nhật" : "Thêm câu hỏi"}
+                        </motion.button>
+
+                        {editingQuestion && (
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                              resetQuestionForm();
+                              setShowQuestionForm(false);
+                            }}
+                            className="px-6 py-3 bg-white/10 text-white rounded-xl font-bold hover:bg-white/20 transition-all duration-300"
+                          >
+                            Hủy
+                          </motion.button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {!showQuestionForm && !editingQuestion && (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setShowQuestionForm(true)}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-4 bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-300 rounded-xl hover:from-purple-500/30 hover:to-pink-500/30 transition-all duration-300 border border-purple-500/30"
+                    >
+                      <FiPlus className="w-5 h-5" />
+                      Thêm câu hỏi mới
+                    </motion.button>
+                  )}
+                </div>
+              )}
+
+              {/* Questions List */}
+              <div className="space-y-6">
+                {questions.length > 0 ? (
+                  questions.map((question, index) => (
+                    <motion.div
+                      key={question.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20"
+                    >
+                      {/* Question Header */}
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-start gap-4">
+                          <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                            {index + 1}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-white font-medium text-lg mb-3">
+                              {question.question}
+                            </p>
+
+                            {/* Question Image */}
+                            {question.image_url && (
+                              <div className="mb-4">
+                                <img
+                                  src={question.image_url}
+                                  alt="Question"
+                                  className="w-full h-48 object-cover rounded-xl border border-white/20"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = "none";
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Question Actions */}
+                        {quizPacks.find(p => p.id === viewingQuestions)?.author !== "official" && (
+                          <div className="flex gap-2">
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => editQuestion(question)}
+                              className="p-2 bg-green-500/20 text-green-300 rounded-lg hover:bg-green-500/30 transition-all duration-300 border border-green-500/30"
+                            >
+                              <FiEdit3 className="w-4 h-4" />
+                            </motion.button>
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => deleteQuestion(question.id)}
+                              className="p-2 bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/30 transition-all duration-300 border border-red-500/30"
+                            >
+                              <FiTrash2 className="w-4 h-4" />
+                            </motion.button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Options */}
+                      <div className="grid grid-cols-1 gap-3 ml-14">
+                        {question.options.map((option, optIndex) => (
+                          <div
+                            key={optIndex}
+                            className={`flex items-center gap-4 p-4 rounded-xl transition-all duration-300 ${
+                              optIndex === question.correct_answer
+                                ? "bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 text-green-300"
+                                : "bg-white/5 border border-white/10 text-white/80 hover:bg-white/10"
+                            }`}
+                          >
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                                optIndex === question.correct_answer
+                                  ? "bg-green-500 text-white"
+                                  : "bg-white/20 text-white/80"
+                              }`}
+                            >
+                              {String.fromCharCode(65 + optIndex)}
+                            </div>
+                            <span className="text-base flex-1">{option}</span>
+                            {optIndex === question.correct_answer && (
+                              <FiAward className="w-5 h-5 text-green-400" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Explanation */}
+                      {question.explanation && (
+                        <div className="mt-4 ml-14 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                          <div className="flex items-center gap-2 mb-2">
+                            <FiBookOpen className="w-5 h-5 text-blue-400" />
+                            <span className="text-blue-400 text-base font-medium">
+                              Giải thích
+                            </span>
+                          </div>
+                          <p className="text-white/80 text-base">
+                            {question.explanation}
+                          </p>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))
+                ) : (
+                  <div className="text-center py-12">
+                    <FiImage className="w-16 h-16 text-white/40 mx-auto mb-4" />
+                    <p className="text-white/60 text-lg">Chưa có câu hỏi nào</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Scrollbar Styles */}
+      <style jsx global>{`
+        .line-clamp-2 {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+
+        /* Floating animation */
+        @keyframes float {
+          0%,
+          100% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-10px);
+          }
+        }
+
+        /* Gradient animation */
+        @keyframes gradient {
+          0% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
+          }
+        }
+
+        .animate-gradient {
+          background-size: 200% 200%;
+          animation: gradient 3s ease infinite;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.3);
+          border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Select dropdown arrow */
+        select {
+          background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+          background-position: right 12px center;
+          background-repeat: no-repeat;
+          background-size: 16px;
+        }
+      `}</style>
     </div>
   );
 };
 
-export default QuizManager;
+export default QuizPacksCRUD;
