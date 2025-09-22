@@ -136,7 +136,16 @@ const generateRandomRoomCode = (): string => {
 };
 
 const generateUniqueId = (): string => {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+  let sessionId = sessionStorage.getItem("sessionId");
+
+  if (!sessionId) {
+    // nếu chưa có thì tạo mới
+    sessionId =
+      Date.now().toString(36) + Math.random().toString(36).substring(2);
+    sessionStorage.setItem("sessionId", sessionId);
+  }
+
+  return sessionId;
 };
 
 const isDesktop = (): boolean => {
@@ -263,8 +272,6 @@ class DatabaseService {
         console.error("Error creating room:", error);
         throw error;
       }
-
-      console.log("Room created successfully:", roomCode);
     } catch (error) {
       console.error("Failed to create room:", error);
       throw error;
@@ -297,8 +304,6 @@ class DatabaseService {
         console.error("Error joining room:", updateError);
         throw updateError;
       }
-
-      console.log("Successfully joined room:", roomCode);
     } catch (error) {
       console.error("Failed to join room:", error);
       throw error;
@@ -1036,7 +1041,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="flex-1 mx-auto w-full max-w-7xl grid grid-cols-1 gap-4 px-4 pb-4 lg:grid-cols-12 lg:mt-0"
+        className=" mx-auto w-full max-w-7xl grid grid-cols-1 gap-4 px-4 pb-4 lg:grid-cols-12 lg:mt-0"
       >
         {/* Mobile Toggle */}
         <motion.div variants={fadeUp} className="lg:hidden">

@@ -37,7 +37,7 @@ const QuizPackItem: React.FC<QuizPackItemProps> = ({
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
       onClick={() => onSelect(pack)}
-      className={`relative p-4 rounded-xl cursor-pointer transition-all border overflow-hidden ${
+      className={`relative p-3 rounded-xl cursor-pointer transition-all border overflow-hidden ${
         isSelected
           ? "bg-gradient-to-br from-purple-500/20 to-purple-600/20 border-purple-500/50 shadow-lg"
           : "bg-gradient-to-br from-white/10 to-white/5 border-white/20 hover:border-white/30"
@@ -121,12 +121,12 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
 }) => {
   // Kết hợp default packs và custom packs
   const allPacks = [...DEFAULT_QUIZ_PACKS, ...customPacks];
-  
+
   // Đảm bảo luôn có một pack được chọn mặc định
   useEffect(() => {
     if (!selectedPack && allPacks.length > 0) {
       // Tìm pack đầu tiên không bị ẩn
-      const firstVisiblePack = allPacks.find(pack => !pack.isHidden);
+      const firstVisiblePack = allPacks.find((pack) => !pack.isHidden);
       if (firstVisiblePack) {
         onPackSelect(firstVisiblePack);
       }
@@ -160,7 +160,7 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
           }}
           initial="hidden"
           animate="visible"
-          className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 mb-6"
+          className="grid grid-cols-1 md:grid-cols-2 gap-2 p-2 mb-4"
         >
           {allPacks
             .filter((p) => !p.isHidden)
@@ -177,9 +177,9 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
         <motion.button
           whileHover={{ scale: 1.01, y: -2 }}
           whileTap={{ scale: 0.95 }}
-          className="w-full bg-gradient-to-r from-green-500/20 to-green-600/20 
+          className="w-[95%] m-auto bg-gradient-to-r from-green-500/20 to-green-600/20 
              hover:from-green-500/30 hover:to-green-600/30 
-             px-4 py-3 rounded-xl border border-green-500/50 
+             p-3 rounded-xl border border-green-500/50 
              transition-all font-medium shadow-lg 
              flex items-center justify-center text-white"
         >
@@ -188,7 +188,7 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
             className="w-auto inline-flex items-center space-x-2 px-3"
           >
             <FaPlus className="text-green-400" />
-            <span>Add Custom Pack (coming soon)</span>
+            <span>Add Custom Pack</span>
           </Link>
         </motion.button>
       </motion.div>

@@ -228,7 +228,7 @@ const QuizGame = () => {
         .single();
 
       if (error || !roomData?.player_list) {
-        console.log("No saved player scores found");
+        console.error("No saved player scores found");
         return {};
       }
 
@@ -246,7 +246,6 @@ const QuizGame = () => {
         }
       });
 
-      console.log("Loaded player scores from database:", playerScores);
       return playerScores;
     } catch (error) {
       console.error("Error loading player scores:", error);
@@ -683,9 +682,6 @@ const QuizGame = () => {
       const effectId = `effect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const effect = cardData.effect;
       const currentTime = Date.now();
-
-      console.log(`Applying card effect: ${card.name}`, effect);
-
       switch (effect.type) {
         case "time":
           const timeEffect: ActiveCardEffect = {
@@ -974,9 +970,7 @@ const QuizGame = () => {
     ]
   );
 
-  const handleTimeoutForUnansweredPlayers = useCallback(() => {
-    console.log("Time up! Marking unanswered players as having answered incorrectly");
-    
+  const handleTimeoutForUnansweredPlayers = useCallback(() => {    
     updatePlayersWithOptimization(prev => 
       prev.map((player) => {
         if (!player.hasAnswered) {
@@ -1251,9 +1245,7 @@ const QuizGame = () => {
     let emergencyTimeout: NodeJS.Timeout | null = null;
 
     if (showLeaderboardAfterAnswer && !gameOver) {
-      console.log("Emergency backup timer started (10s)...");
       emergencyTimeout = setTimeout(() => {
-        console.log("EMERGENCY: Forcing transition from leaderboard!");
         setShowLeaderboardAfterAnswer(false);
         setScoreUpdates([]);
         goToNextQuestion();
@@ -1268,16 +1260,6 @@ const QuizGame = () => {
   }, [showLeaderboardAfterAnswer, gameOver, goToNextQuestion]);
 
   useEffect(() => {
-    console.log("Leaderboard effect triggered:", {
-      allPlayersAnswered,
-      timeLeft,
-      isAnswered,
-      showLeaderboardAfterAnswer,
-      showCorrectAnswer,
-      gameOver,
-      isPaused,
-    });
-
     if (answerPhaseTimerRef.current) {
       clearTimeout(answerPhaseTimerRef.current);
       answerPhaseTimerRef.current = null;
@@ -1303,14 +1285,10 @@ const QuizGame = () => {
       showCorrectAnswer &&
       !showLeaderboardAfterAnswer
     ) {
-      console.log("Starting answer phase timer (2s)...");
-
       answerPhaseTimerRef.current = setTimeout(() => {
-        console.log("Moving to leaderboard...");
         setShowCorrectAnswer(false);
         setShowLeaderboardAfterAnswer(true);
         leaderboardTimerRef.current = setTimeout(() => {
-          console.log("Forcing move to next question...");
           setShowLeaderboardAfterAnswer(false);
           setScoreUpdates([]);
           goToNextQuestion();

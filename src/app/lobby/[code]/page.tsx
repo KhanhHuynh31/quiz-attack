@@ -41,7 +41,6 @@ import { loadPlayerData } from "@/hooks/useLocalStorage";
 
 // Types and Data
 import {
-  GameConfig,
   GameMode,
   GameSettings,
   Player,
@@ -693,7 +692,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       variants={staggerChildren}
       initial="hidden"
       animate="visible"
-      className="flex flex-col-reverse gap-5 lg:flex-row mb-6 justify-between"
+      className="flex flex-col-reverse gap-4 lg:flex-row mb-2 justify-between"
     >
       {/* Mobile Dropdown */}
       <div className="block lg:hidden relative w-full">
@@ -853,7 +852,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             )}
             <span>
               {!isHost
-                ? "Only Host Can Start"
+                ? "Wait Host"
                 : !isPlayerVerified
                 ? "Verifying..."
                 : isLoading
@@ -929,27 +928,8 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           <motion.div
             key={`tab-${activeTab}`}
             {...animations.tabContent}
-            className="h-full overflow-y-auto overflow-x-hidden space-y-6 p-3"
+            className="h-full overflow-y-auto overflow-x-hidden space-y-0 sm:space-y-6 p-0 sm:p-3"
           >
-            <motion.h3
-              initial={{ y: -20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              className="text-2xl font-bold mb-6 flex items-center space-x-3"
-            >
-              {activeTab === "settings" ? (
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                >
-                  <IconComponent className={config.iconColor} />
-                </motion.div>
-              ) : (
-                <IconComponent className={config.iconColor} />
-              )}
-              <span>{config.title}</span>
-              {!isHost && <FaLock className="text-red-400 text-lg" />}
-            </motion.h3>
-
             <div className={!isHost ? "pointer-events-none opacity-60" : ""}>
               {config.component}
             </div>
@@ -1058,44 +1038,66 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       {/* Header */}
       <motion.header
         {...animations.header}
-        className="flex items-center justify-between p-6 h-24 flex-shrink-0 relative z-10"
+        className="flex flex-col md:flex-row md:items-center md:justify-between 
+             p-4 md:p-6 h-auto md:h-24 flex-shrink-0 relative z-10 "
       >
-        <motion.button
-          whileHover={{ scale: 1.05, y: -2 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={handleLeaveRoom}
-          className="flex items-center space-x-3 bg-white/10 backdrop-blur-lg px-6 py-3 rounded-xl hover:bg-white/20 transition-all border border-white/20 shadow-lg"
-        >
-          <motion.div
-            animate={{ rotate: [0, -10, 10, 0] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        {/* Top row: Home + Language (mobile) */}
+        <div className="flex w-full items-center justify-between md:w-auto">
+          {/* Home button */}
+          <motion.button
+            whileHover={{ scale: 1.05, y: -2 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleLeaveRoom}
+            className="flex items-center space-x-2 md:space-x-3 
+                 bg-white/10 backdrop-blur-lg px-4 md:px-6 py-2 md:py-3 
+                 rounded-xl hover:bg-white/20 transition-all 
+                 border border-white/20 shadow-lg"
           >
-            <FaHome className="text-xl text-blue-400" />
-          </motion.div>
-          <span className="font-medium">{t.home}</span>
-        </motion.button>
+            <motion.div
+              animate={{ rotate: [0, -10, 10, 0] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <FaHome className="text-lg md:text-xl text-blue-400" />
+            </motion.div>
+            <span className="font-medium text-sm md:text-base">{t.home}</span>
+          </motion.button>
 
+          {/* Language selector */}
+          <div className="block md:hidden">
+            <LanguageSelector />
+          </div>
+        </div>
+
+        {/* Title & room info */}
         <motion.div
           initial={{ scale: 0, y: -20 }}
           animate={{ scale: 1, y: 0 }}
           transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
-          className="text-center"
+          className="text-center flex-1 min-w-0"
         >
           <motion.h1
-            className="text-4xl font-bold bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 bg-clip-text text-transparent"
+            className="text-2xl md:text-4xl font-bold bg-gradient-to-r 
+                 from-yellow-400 via-orange-500 to-red-500 
+                 bg-clip-text text-transparent truncate"
             animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
             transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
             style={{ backgroundSize: "200% 200%" }}
           >
             Quiz Attack
           </motion.h1>
-          <div className="flex items-center gap-4 justify-center mt-2">
-            <div className="flex items-center justify-center space-x-3">
-              <span className="text-sm text-white/70 font-medium">
+
+          {/* room code & pass */}
+          <div className="flex flex-wrap items-center gap-2 md:gap-4 justify-center mt-2">
+            {/* Room code */}
+            <div className="flex items-center justify-center space-x-2 md:space-x-3">
+              <span className="text-xs md:text-sm text-white/70 font-medium">
                 {t.room}:
               </span>
-              <div className="flex items-center space-x-2 bg-white/10 px-3 py-1 rounded-lg">
-                <span className="text-sm font-mono font-bold">
+              <div
+                className="flex items-center space-x-1 md:space-x-2 
+                        bg-white/10 px-2 md:px-3 py-1 rounded-lg"
+              >
+                <span className="text-xs md:text-sm font-mono font-bold truncate max-w-[100px] md:max-w-none">
                   {maskedRoomCode}
                 </span>
                 <motion.button
@@ -1108,11 +1110,18 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
                 </motion.button>
               </div>
             </div>
+
+            {/* Room password */}
             {roomPassword && (
-              <div className="flex items-center justify-center space-x-3">
-                <span className="text-sm text-white/70 font-medium">Pass:</span>
-                <div className="flex items-center space-x-2 bg-white/10 px-3 py-1 rounded-lg">
-                  <span className="text-sm font-mono font-bold">
+              <div className="flex items-center justify-center space-x-2 md:space-x-3">
+                <span className="text-xs md:text-sm text-white/70 font-medium">
+                  Pass:
+                </span>
+                <div
+                  className="flex items-center space-x-1 md:space-x-2 
+                          bg-white/10 px-2 md:px-3 py-1 rounded-lg"
+                >
+                  <span className="text-xs md:text-sm font-mono font-bold truncate max-w-[100px] md:max-w-none">
                     {maskedRoomPass}
                   </span>
                   <motion.button
@@ -1128,11 +1137,15 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             )}
           </div>
         </motion.div>
-        <LanguageSelector />
+
+        {/* Language selector (desktop) */}
+        <div className="hidden md:block">
+          <LanguageSelector />
+        </div>
       </motion.header>
 
       {/* Main Content */}
-      <main className="flex-1 px-6 pb-6 overflow-y-auto lg:overflow-hidden flex flex-col">
+      <main className="flex-1 px-2 pb-2 sm:px-4 sm:pb-4 md:px-6 md:pb-6 overflow-y-auto lg:overflow-hidden flex flex-col">
         {/* Mobile Toggle Players Button */}
         <AnimatePresence>
           {!showPlayersOnMobile && (
@@ -1181,7 +1194,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             variants={slideInRight}
             initial="hidden"
             animate="visible"
-            className="lg:col-span-2 bg-white/10 backdrop-blur-lg rounded-2xl p-6 flex flex-col h-full overflow-hidden border border-white/20 shadow-xl"
+            className="lg:col-span-2 bg-white/10 backdrop-blur-lg rounded-2xl p-4 flex flex-col h-full overflow-hidden border border-white/20 shadow-xl"
           >
             <ShareSection
               shareLink={shareLink}

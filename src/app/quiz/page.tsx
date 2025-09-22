@@ -84,9 +84,6 @@ const useToast = () => {
     message: string,
     type: "success" | "error" | "info" = "success"
   ) => {
-    // Simple console log for now since we can't use external toast library
-    console.log(`${type.toUpperCase()}: ${message}`);
-
     // Create a simple toast notification
     const toast = document.createElement("div");
     toast.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg text-white font-bold transform transition-all duration-300 ${

@@ -61,52 +61,53 @@ const GameModeItem: React.FC<GameModeItemProps> = ({
         transition={{ duration: 0.8, ease: "easeInOut" }}
       />
 
-      <div className="relative z-10 flex items-center space-x-4 w-full">
-        <motion.div
-          animate={
-            isHovered
-              ? {
-                  scale: 1.3,
-                  rotate: [0, -10, 10, 0],
-                }
-              : { scale: 1, rotate: 0 }
+      <div className="relative z-10 flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-3 w-full">
+  <motion.div
+    animate={
+      isHovered
+        ? {
+            scale: 1.2,
+            rotate: [0, -10, 10, 0],
           }
-          transition={{ duration: 0.4 }}
-          className="flex-shrink-0 p-3 rounded-lg bg-white/10"
-        >
-          {style.icon}
-        </motion.div>
+        : { scale: 1, rotate: 0 }
+    }
+    transition={{ duration: 0.4 }}
+    className="flex-shrink-0 p-2 sm:p-3 rounded-lg bg-white/10"
+  >
+    {style.icon}
+  </motion.div>
 
-        <div className="flex-1">
-          <motion.h4
-            animate={isHovered ? { x: 5 } : { x: 0 }}
-            className="font-bold text-lg"
-          >
-            {mode.name}
-          </motion.h4>
-          <motion.p
-            animate={isHovered ? { x: 5 } : { x: 0 }}
-            transition={{ delay: 0.05 }}
-            className="text-sm text-white/70 leading-relaxed"
-          >
-            {mode.description}
-          </motion.p>
-        </div>
+  <div className="flex-1 min-w-0">
+    <motion.h4
+      animate={isHovered ? { x: 3 } : { x: 0 }}
+      className="font-bold text-base sm:text-lg truncate"
+    >
+      {mode.name}
+    </motion.h4>
+    <motion.p
+      animate={isHovered ? { x: 3 } : { x: 0 }}
+      transition={{ delay: 0.05 }}
+      className="text-xs sm:text-sm text-white/70 leading-snug sm:leading-relaxed"
+    >
+      {mode.description}
+    </motion.p>
+  </div>
 
-        <AnimatePresence>
-          {isSelected && (
-            <motion.div
-              initial={{ scale: 0, rotate: -180 }}
-              animate={{ scale: 1, rotate: 0 }}
-              exit={{ scale: 0, rotate: 180 }}
-              transition={{ type: "spring", stiffness: 300 }}
-              className="flex-shrink-0"
-            >
-              <FaCheck className="text-white text-xl drop-shadow-lg" />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+  <AnimatePresence>
+    {isSelected && (
+      <motion.div
+        initial={{ scale: 0, rotate: -180 }}
+        animate={{ scale: 1, rotate: 0 }}
+        exit={{ scale: 0, rotate: 180 }}
+        transition={{ type: "spring", stiffness: 300 }}
+        className="flex-shrink-0 self-start sm:self-center"
+      >
+        <FaCheck className="text-white text-lg sm:text-xl drop-shadow-lg" />
+      </motion.div>
+    )}
+  </AnimatePresence>
+</div>
+
     </motion.div>
   );
 };
@@ -149,7 +150,7 @@ export const GameModeSelector: React.FC<GameModeSelectorProps> = ({
   }, [selectedMode, onModeSelect]);
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-2 sm:space-y-3 md:space-y-4 p-2 sm:p-3 md:p-4">
       {GAME_MODES.map((mode, index) => (
         <GameModeItem
           key={mode.id}

@@ -111,7 +111,7 @@ class DatabaseService {
       if (error) {
         if (error.code === 'PGRST116') {
           // No rows found - room doesn't exist
-          console.log('Room does not exist:', roomCode);
+          console.error('Room does not exist:', roomCode);
           return null;
         }
         console.error("Error fetching room data:", error);
@@ -175,7 +175,7 @@ class DatabaseService {
       // Check if player already exists in the room
       const playerExists = currentPlayers.some(p => p.id === player.id);
       if (playerExists) {
-        console.log("Player already in room, proceeding...");
+        console.error("Player already in room, proceeding...");
         return;
       }
 
@@ -193,8 +193,6 @@ class DatabaseService {
         console.error("Error joining room:", updateError);
         throw updateError;
       }
-
-      console.log("Successfully joined room:", roomCode);
     } catch (error) {
       console.error("Failed to join room:", error);
       throw error;
