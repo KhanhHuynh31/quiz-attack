@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import Avatar, { genConfig, AvatarFullConfig } from "react-nice-avatar";
 import {
   FaRandom,
-  FaUpload,
   FaTimes,
   FaEye,
   FaSmile,
@@ -69,6 +68,8 @@ export const avatarOptions = {
     { value: "normal", label: "Normal" },
     { value: "thick", label: "Thick" },
     { value: "mohawk", label: "Mohawk" },
+    { value: "womanLong", label: "womanLong" },
+    { value: "womanShort", label: "womanShort" },
   ],
   hatStyle: [
     { value: "none", label: "None" },
@@ -148,8 +149,6 @@ interface AvatarCustomModalProps {
   onClose: () => void;
   avatarConfig: AvatarFullConfig;
   setAvatarConfig: React.Dispatch<React.SetStateAction<AvatarFullConfig>>;
-  customAvatarImage: string | null;
-  setCustomAvatarImage: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 const AvatarCustomModal: React.FC<AvatarCustomModalProps> = ({
@@ -157,30 +156,15 @@ const AvatarCustomModal: React.FC<AvatarCustomModalProps> = ({
   onClose,
   avatarConfig,
   setAvatarConfig,
-  customAvatarImage,
-  setCustomAvatarImage,
 }) => {
   const [activeCategory, setActiveCategory] = useState("face");
 
   const generateRandomAvatar = () => {
     setAvatarConfig(genConfig());
-    setCustomAvatarImage(null);
-  };
-
-  const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setCustomAvatarImage(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
   };
 
   const updateAvatarConfig = (key: string, value: any) => {
     setAvatarConfig((prev) => ({ ...prev, [key]: value }));
-    setCustomAvatarImage(null);
   };
 
   return (
@@ -215,16 +199,7 @@ const AvatarCustomModal: React.FC<AvatarCustomModalProps> = ({
               {/* Avatar Preview */}
               <div className="flex flex-col items-center lg:w-1/3">
                 <div className="w-40 h-40 lg:w-48 lg:h-48 rounded-full border-4 border-white/20 overflow-hidden mb-4 relative">
-                  {customAvatarImage ? (
-                    <img
-                      src={customAvatarImage}
-                      alt="Custom Avatar"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <Avatar className="w-full h-full" {...avatarConfig} />
-                  )}
-
+                  <Avatar className="w-full h-full" {...avatarConfig} />
                   {/* Camera icon overlay */}
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity duration-300 rounded-full">
                     <FaEye className="text-white text-2xl" />
@@ -241,17 +216,6 @@ const AvatarCustomModal: React.FC<AvatarCustomModalProps> = ({
                     <FaRandom />
                     Random
                   </motion.button>
-
-                  <label className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-xl font-medium text-sm cursor-pointer">
-                    <FaUpload />
-                    Upload
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleAvatarUpload}
-                    />
-                  </label>
                 </div>
 
                 <motion.button
@@ -322,9 +286,7 @@ const AvatarCustomModal: React.FC<AvatarCustomModalProps> = ({
                               }
                               title={option.label}
                             >
-                              {option.value.startsWith("#")
-                                ? ""
-                                : option.label}
+                              {option.value.startsWith("#") ? "" : option.label}
                             </button>
                           ))}
                         </div>

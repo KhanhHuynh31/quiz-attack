@@ -37,7 +37,6 @@ interface Player {
 interface PlayerData {
   player: Player;
   avatarConfig: AvatarFullConfig;
-  customAvatarImage: string | null;
   roomSettings?: RoomSettings;
 }
 
@@ -87,13 +86,12 @@ const generateUniqueId = (): string => {
 const createPlayerData = (
   nickname: string,
   avatarConfig: AvatarFullConfig,
-  customAvatarImage: string | null,
   isHost: boolean
 ): Player => {
   return {
     id: generateUniqueId(),
     nickname,
-    avatar: customAvatarImage || JSON.stringify(avatarConfig),
+    avatar: JSON.stringify(avatarConfig),
     isHost,
   };
 };
@@ -109,9 +107,9 @@ class DatabaseService {
         .single();
 
       if (error) {
-        if (error.code === 'PGRST116') {
+        if (error.code === "PGRST116") {
           // No rows found - room doesn't exist
-          console.error('Room does not exist:', roomCode);
+          console.error("Room does not exist:", roomCode);
           return null;
         }
         console.error("Error fetching room data:", error);
@@ -164,7 +162,7 @@ class DatabaseService {
       // Parse existing players
       let currentPlayers: Player[] = [];
       try {
-        currentPlayers = roomData.player_list 
+        currentPlayers = roomData.player_list
           ? roomData.player_list.map((p: string) => JSON.parse(p) as Player)
           : [];
       } catch (parseError) {
@@ -173,7 +171,7 @@ class DatabaseService {
       }
 
       // Check if player already exists in the room
-      const playerExists = currentPlayers.some(p => p.id === player.id);
+      const playerExists = currentPlayers.some((p) => p.id === player.id);
       if (playerExists) {
         console.error("Player already in room, proceeding...");
         return;
@@ -184,8 +182,8 @@ class DatabaseService {
 
       const { error: updateError } = await supabase
         .from("room")
-        .update({ 
-          player_list: updatedPlayers.map(p => JSON.stringify(p))
+        .update({
+          player_list: updatedPlayers.map((p) => JSON.stringify(p)),
         })
         .eq("room_code", roomCode.toUpperCase());
 
@@ -207,13 +205,13 @@ const loadRoomSettings = (): RoomSettings | null => {
       LOCAL_STORAGE_KEYS.PLAYER_DATA,
       null
     );
-    
+
     if (!playerData || !playerData.roomSettings) {
       return null;
     }
-    
+
     const roomSettings = playerData.roomSettings;
-    
+
     // Check if settings are expired (24 hours)
     const now = Date.now();
     if (roomSettings.createdAt + ROOM_SETTINGS_EXPIRY < now) {
@@ -222,7 +220,7 @@ const loadRoomSettings = (): RoomSettings | null => {
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, updatedPlayerData);
       return null;
     }
-    
+
     return roomSettings;
   } catch (error) {
     console.error("Failed to load room settings:", error);
@@ -242,10 +240,9 @@ const saveRoomSettings = (settings: RoomSettings): void => {
           isHost: false,
         },
         avatarConfig: DEFAULT_AVATAR_CONFIG,
-        customAvatarImage: null,
       }
     );
-    
+
     playerData.roomSettings = settings;
     saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
   } catch (error) {
@@ -264,9 +261,7 @@ const useAvatar = () => {
   const [avatarConfig, setAvatarConfig] = useState<AvatarFullConfig>(
     savedPlayerData?.avatarConfig || DEFAULT_AVATAR_CONFIG
   );
-  const [customAvatarImage, setCustomAvatarImage] = useState<string | null>(
-    savedPlayerData?.customAvatarImage || null
-  );
+
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState<boolean>(false);
   const [showAvatarHint, setShowAvatarHint] = useState<boolean>(true);
 
@@ -288,11 +283,10 @@ const useAvatar = () => {
         isHost: false,
       },
       avatarConfig,
-      customAvatarImage,
       roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
     };
     saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
-  }, [avatarConfig, customAvatarImage, savedPlayerData]);
+  }, [avatarConfig, savedPlayerData]);
 
   const openAvatarModal = useCallback(() => {
     setIsAvatarModalOpen(true);
@@ -305,8 +299,6 @@ const useAvatar = () => {
   return {
     avatarConfig,
     setAvatarConfig,
-    customAvatarImage,
-    setCustomAvatarImage,
     isAvatarModalOpen,
     showAvatarHint,
     openAvatarModal,
@@ -319,7 +311,6 @@ const UserProfile: React.FC<{
   nickname: string;
   onNicknameChange: (nickname: string) => void;
   avatarConfig: AvatarFullConfig;
-  customAvatarImage: string | null;
   showAvatarHint: boolean;
   onAvatarClick: () => void;
   t: any;
@@ -327,7 +318,6 @@ const UserProfile: React.FC<{
   nickname,
   onNicknameChange,
   avatarConfig,
-  customAvatarImage,
   showAvatarHint,
   onAvatarClick,
   t,
@@ -359,15 +349,7 @@ const UserProfile: React.FC<{
             : undefined
         }
       >
-        {customAvatarImage ? (
-          <img
-            src={customAvatarImage}
-            alt="User avatar"
-            className="w-full h-full object-cover rounded-full"
-          />
-        ) : (
-          <Avatar className="w-full h-full" {...avatarConfig} />
-        )}
+        <Avatar className="w-full h-full" {...avatarConfig} />
 
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity duration-300 rounded-full">
           <FaEye className="text-white text-xl lg:text-2xl" />
@@ -417,8 +399,6 @@ const JoinRoomPage: React.FC = () => {
   const {
     avatarConfig,
     setAvatarConfig,
-    customAvatarImage,
-    setCustomAvatarImage,
     isAvatarModalOpen,
     showAvatarHint,
     openAvatarModal,
@@ -465,14 +445,18 @@ const JoinRoomPage: React.FC = () => {
         }
 
         setRoomData(data);
-        
+
         // Check if we have saved room settings for this room
         const savedSettings = loadRoomSettings();
-        if (savedSettings && savedSettings.roomCode === roomCode && savedSettings.password) {
+        if (
+          savedSettings &&
+          savedSettings.roomCode === roomCode &&
+          savedSettings.password
+        ) {
           setRoomPassword(savedSettings.password);
           setHasSavedPassword(true);
         }
-        
+
         setIsLoading(false);
         setLastRoomCheck(Date.now());
       } catch (error) {
@@ -512,15 +496,14 @@ const JoinRoomPage: React.FC = () => {
       player: {
         id: savedPlayerData?.player.id || generateUniqueId(),
         nickname,
-        avatar: customAvatarImage || JSON.stringify(avatarConfig),
+        avatar: JSON.stringify(avatarConfig),
         isHost: false, // Always false when joining a room
       },
       avatarConfig,
-      customAvatarImage,
       roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
     };
     saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
-  }, [nickname, avatarConfig, customAvatarImage, savedPlayerData]);
+  }, [nickname, avatarConfig, savedPlayerData]);
 
   // Initialize component
   useEffect(() => {
@@ -571,19 +554,17 @@ const JoinRoomPage: React.FC = () => {
       const player = createPlayerData(
         nickname,
         avatarConfig,
-        customAvatarImage,
         false // isHost = false when joining room
       );
-      
+
       // Update player data with guest status
       const playerData: PlayerData = {
         player,
         avatarConfig,
-        customAvatarImage,
         roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
       };
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
-      
+
       // Save room settings if password was provided and not empty
       if (roomPassword && roomPassword.trim() !== "") {
         const roomSettings: RoomSettings = {
@@ -595,7 +576,7 @@ const JoinRoomPage: React.FC = () => {
         };
         saveRoomSettings(roomSettings);
       }
-      
+
       await DatabaseService.joinRoom(roomCode, player);
       router.push(`/lobby/${roomCode}`);
     } catch (error) {
@@ -608,7 +589,15 @@ const JoinRoomPage: React.FC = () => {
     } finally {
       setIsJoining(false);
     }
-  }, [nickname, avatarConfig, customAvatarImage, roomCode, roomPassword, router, validateNickname, savedPlayerData]);
+  }, [
+    nickname,
+    avatarConfig,
+    roomCode,
+    roomPassword,
+    router,
+    validateNickname,
+    savedPlayerData,
+  ]);
 
   // Loading state
   if (!mounted || isLoading) {
@@ -640,7 +629,9 @@ const JoinRoomPage: React.FC = () => {
           >
             <FaExclamationTriangle />
           </motion.div>
-          <h1 className="text-white text-2xl font-bold mb-4">Room Not Available</h1>
+          <h1 className="text-white text-2xl font-bold mb-4">
+            Room Not Available
+          </h1>
           <p className="text-white/80 mb-6">{error}</p>
           <motion.button
             onClick={() => router.push("/")}
@@ -664,8 +655,6 @@ const JoinRoomPage: React.FC = () => {
         onClose={closeAvatarModal}
         avatarConfig={avatarConfig}
         setAvatarConfig={setAvatarConfig}
-        customAvatarImage={customAvatarImage}
-        setCustomAvatarImage={setCustomAvatarImage}
       />
 
       <motion.main
@@ -679,26 +668,23 @@ const JoinRoomPage: React.FC = () => {
           className="w-full rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-6 shadow-2xl backdrop-blur-md relative"
         >
           <div className="text-center mb-6">
-            <motion.h1 
+            <motion.h1
               variants={fadeUp}
               className="text-2xl font-bold text-white mb-2"
             >
               Join Room
             </motion.h1>
-            <motion.p 
+            <motion.p
               variants={fadeUp}
               className="text-white/70 text-lg font-mono"
             >
               {roomCode}
             </motion.p>
-            <motion.p 
-              variants={fadeUp}
-              className="text-white/50 text-sm mt-2"
-            >
+            <motion.p variants={fadeUp} className="text-white/50 text-sm mt-2">
               Last checked: {new Date(lastRoomCheck).toLocaleTimeString()}
             </motion.p>
             {hasSavedPassword && (
-              <motion.p 
+              <motion.p
                 variants={fadeUp}
                 className="text-green-400 text-sm mt-1"
               >
@@ -713,7 +699,6 @@ const JoinRoomPage: React.FC = () => {
               nickname={nickname}
               onNicknameChange={handleNicknameChange}
               avatarConfig={avatarConfig}
-              customAvatarImage={customAvatarImage}
               showAvatarHint={showAvatarHint}
               onAvatarClick={openAvatarModal}
               t={t}
@@ -722,10 +707,7 @@ const JoinRoomPage: React.FC = () => {
 
           {/* Password Input (if room is password protected) */}
           {roomData?.room_password && (
-            <motion.div 
-              variants={fadeUp}
-              className="mb-6"
-            >
+            <motion.div variants={fadeUp} className="mb-6">
               <label className="block text-sm font-medium text-[#EAEAEA] mb-2">
                 Room Password
               </label>
@@ -737,7 +719,7 @@ const JoinRoomPage: React.FC = () => {
                 className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all"
                 {...animationVariants.inputField}
                 onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === "Enter") {
                     handleJoinRoom();
                   }
                 }}
@@ -747,7 +729,7 @@ const JoinRoomPage: React.FC = () => {
 
           {/* Error Message */}
           {error && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-200 text-sm"
