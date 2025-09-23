@@ -11,6 +11,10 @@ import {
   FaCog,
   FaEye,
   FaChevronRight,
+  FaSignInAlt,
+  FaSignOutAlt,
+  FaUser,
+  FaInfoCircle,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import Avatar, { genConfig, AvatarFullConfig } from "react-nice-avatar";
@@ -32,6 +36,7 @@ import {
   saveToLocalStorage,
 } from "@/hooks/useLocalStorage";
 import { supabase } from "@/lib/supabaseClient";
+import AuthModal from "@/components/users/AuthModal";
 
 // Types
 type TabType = "gameMode" | "quizPack";
@@ -46,13 +51,25 @@ interface Player {
   nickname: string;
   avatar: string;
   isHost: boolean;
+  isAuthenticated?: boolean;
+  email?: string;
+}
+
+interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  avatar: string;
+  avatarConfig?: AvatarFullConfig;
+  customAvatarImage?: string | null;
 }
 
 interface PlayerData {
   player: Player;
   avatarConfig: AvatarFullConfig;
   customAvatarImage: string | null;
-  roomSettings?: RoomSettings; // Added roomSettings to PlayerData
+  roomSettings?: RoomSettings;
+  authUser?: AuthUser;
 }
 
 interface RoomSettings {
@@ -78,7 +95,7 @@ const CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const AVATAR_HINT_DURATION = 5000;
 const COPY_SUCCESS_DURATION = 1500;
 const DESKTOP_BREAKPOINT = 1024;
-const ROOM_SETTINGS_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+const ROOM_SETTINGS_EXPIRY = 24 * 60 * 60 * 1000;
 
 const DEFAULT_AVATAR_CONFIG = genConfig();
 
@@ -124,6 +141,10 @@ const animationVariants = {
     exit: { opacity: 0, height: 0 },
     transition: { duration: 0.3 },
   },
+  authButton: {
+    whileHover: { scale: 1.05 },
+    whileTap: { scale: 0.95 },
+  },
 } as const;
 
 // Utility functions
@@ -139,7 +160,6 @@ const generateUniqueId = (): string => {
   let sessionId = sessionStorage.getItem("sessionId");
 
   if (!sessionId) {
-    // nếu chưa có thì tạo mới
     sessionId =
       Date.now().toString(36) + Math.random().toString(36).substring(2);
     sessionStorage.setItem("sessionId", sessionId);
@@ -158,17 +178,150 @@ const createPlayerData = (
   nickname: string,
   avatarConfig: AvatarFullConfig,
   customAvatarImage: string | null,
-  isHost: boolean
+  isHost: boolean,
+  authUser?: AuthUser
 ): Player => {
   return {
-    id: generateUniqueId(),
-    nickname,
+    id: authUser?.id || generateUniqueId(),
+    nickname: authUser?.name || nickname,
     avatar: customAvatarImage || JSON.stringify(avatarConfig),
     isHost,
+    isAuthenticated: !!authUser,
+    email: authUser?.email,
   };
 };
 
-// Room settings storage utilities - now stored in PLAYER_DATA
+// Authentication utilities
+const loadAuthUser = (): AuthUser | null => {
+  try {
+    // First try to load from dedicated auth storage
+    let authData = loadFromLocalStorage<AuthUser | null>("auth_user", null);
+
+    if (authData) {
+      // Parse and clean if necessary
+      let parsed = { ...authData };
+      if (
+        parsed.customAvatarImage &&
+        !parsed.customAvatarImage.startsWith("http") &&
+        typeof parsed.customAvatarImage === "string"
+      ) {
+        try {
+          const originalCustomAvatar = parsed.customAvatarImage;
+          parsed.customAvatarImage = null;
+          if (!parsed.avatarConfig) {
+            parsed.avatarConfig = JSON.parse(originalCustomAvatar);
+          }
+          parsed.avatar = JSON.stringify(parsed.avatarConfig);
+        } catch (e) {
+          // Invalid JSON, keep as is or default
+          parsed.customAvatarImage = null;
+          parsed.avatarConfig = DEFAULT_AVATAR_CONFIG;
+          parsed.avatar = JSON.stringify(DEFAULT_AVATAR_CONFIG);
+        }
+      }
+      return parsed;
+    }
+
+    // Fallback to player data storage
+    const playerData = loadFromLocalStorage<PlayerData | null>(
+      LOCAL_STORAGE_KEYS.PLAYER_DATA,
+      null
+    );
+    if (playerData?.authUser) {
+      let parsed = { ...playerData.authUser };
+      if (
+        parsed.customAvatarImage &&
+        !parsed.customAvatarImage.startsWith("http") &&
+        typeof parsed.customAvatarImage === "string"
+      ) {
+        try {
+          const originalCustomAvatar = parsed.customAvatarImage;
+          parsed.customAvatarImage = null;
+          if (!parsed.avatarConfig) {
+            parsed.avatarConfig = JSON.parse(originalCustomAvatar);
+          }
+          parsed.avatar = JSON.stringify(parsed.avatarConfig);
+        } catch (e) {
+          parsed.customAvatarImage = null;
+          parsed.avatarConfig = DEFAULT_AVATAR_CONFIG;
+          parsed.avatar = JSON.stringify(DEFAULT_AVATAR_CONFIG);
+        }
+      }
+      return parsed;
+    }
+    return null;
+  } catch (error) {
+    console.error("Failed to load auth user:", error);
+    return null;
+  }
+};
+
+const saveAuthUser = (authUser: AuthUser): void => {
+  try {
+    // Save to dedicated auth storage for persistence across pages
+    saveToLocalStorage("auth_user", authUser);
+
+    // Also save to player data for backward compatibility
+    const existingPlayerData = loadFromLocalStorage<PlayerData | null>(
+      LOCAL_STORAGE_KEYS.PLAYER_DATA,
+      null
+    );
+
+    const playerData: PlayerData = {
+      player: {
+        id: authUser.id,
+        nickname: authUser.name,
+        avatar: authUser.avatar,
+        isHost: existingPlayerData?.player.isHost || false,
+        isAuthenticated: true,
+        email: authUser.email,
+      },
+      avatarConfig: authUser.avatarConfig || DEFAULT_AVATAR_CONFIG,
+      customAvatarImage: authUser.customAvatarImage || null,
+      roomSettings: existingPlayerData?.roomSettings,
+      authUser,
+    };
+
+    saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+  } catch (error) {
+    console.error("Failed to save auth user:", error);
+  }
+};
+
+const clearAuthUser = (): void => {
+  try {
+    // Clear from dedicated auth storage
+    localStorage.removeItem("auth_user");
+
+    // Clear from player data but keep room settings
+    const playerData = loadFromLocalStorage<PlayerData | null>(
+      LOCAL_STORAGE_KEYS.PLAYER_DATA,
+      null
+    );
+
+    if (playerData) {
+      const updatedPlayerData: PlayerData = {
+        player: {
+          id: generateUniqueId(),
+          nickname: playerData.player.nickname || "",
+          avatar: playerData.player.avatar || "",
+          isHost: false,
+          isAuthenticated: false,
+        },
+        avatarConfig: playerData.avatarConfig || DEFAULT_AVATAR_CONFIG,
+        customAvatarImage: playerData.customAvatarImage || null,
+        roomSettings: playerData.roomSettings,
+        authUser: undefined,
+      };
+
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, updatedPlayerData);
+    }
+  } catch (error) {
+    console.error("Failed to clear auth user:", error);
+  }
+};
+
+// Room settings storage utilities
 const saveRoomSettings = (settings: RoomSettings): void => {
   try {
     const playerData = loadFromLocalStorage<PlayerData>(
@@ -204,11 +357,8 @@ const loadRoomSettings = (): RoomSettings | null => {
     }
 
     const roomSettings = playerData.roomSettings;
-
-    // Check if settings are expired (24 hours)
     const now = Date.now();
     if (roomSettings.createdAt + ROOM_SETTINGS_EXPIRY < now) {
-      // Remove expired settings
       const updatedPlayerData = { ...playerData, roomSettings: undefined };
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, updatedPlayerData);
       return null;
@@ -251,7 +401,6 @@ class DatabaseService {
     password: string | null
   ): Promise<void> {
     try {
-      // Check if room already exists
       const roomExists = await this.checkRoomExists(roomCode);
       if (roomExists) {
         throw new Error("Room with this code already exists");
@@ -260,7 +409,7 @@ class DatabaseService {
       const roomData: RoomData = {
         room_code: roomCode,
         player_list: [JSON.stringify(player)],
-        setting_list: [], // Can be extended later for room settings
+        setting_list: [],
         game_mode: selectedGameMode?.id || 1,
         quiz_pack: selectedPack?.id || 1,
         room_password: password,
@@ -280,7 +429,6 @@ class DatabaseService {
 
   static async joinRoom(roomCode: string, player: Player): Promise<void> {
     try {
-      // First check if room exists
       const { data: roomData, error: fetchError } = await supabase
         .from("room")
         .select("player_list")
@@ -291,7 +439,6 @@ class DatabaseService {
         throw new Error("Room not found");
       }
 
-      // Add player to the existing player list
       const currentPlayers = roomData.player_list || [];
       const updatedPlayers = [...currentPlayers, JSON.stringify(player)];
 
@@ -332,9 +479,263 @@ class DatabaseService {
       return false;
     }
   }
+
+  // Updated to use profiles table instead of users table
+  static async updateUserProfile(
+    userId: string,
+    updates: {
+      name?: string;
+      avatar_url?: string;
+      avatar_config?: AvatarFullConfig;
+    }
+  ): Promise<void> {
+    try {
+      const updateData: any = {};
+
+      if (updates.name) updateData.name = updates.name;
+      if (updates.avatar_url) updateData.avatar_url = updates.avatar_url;
+      if (updates.avatar_config)
+        updateData.avatar_config = JSON.stringify(updates.avatar_config);
+
+      const { error } = await supabase
+        .from("profiles")
+        .update(updateData)
+        .eq("id", userId);
+
+      if (error) {
+        console.error("Error updating user profile:", error);
+        throw error;
+      }
+    } catch (error) {
+      console.error("Failed to update user profile:", error);
+      throw error;
+    }
+  }
+
+  // Method to fetch updated user profile from database
+  static async fetchUserProfile(userId: string): Promise<AuthUser | null> {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        console.error("Error fetching user profile:", error);
+        return null;
+      }
+
+      if (!data) return null;
+
+      let avatar: string;
+      let avatarConfig: AvatarFullConfig;
+      let customAvatarImage: string | null;
+
+      const storedConfigStr = data.avatar_config;
+      const storedUrl = data.avatar_url;
+
+      let storedConfig: AvatarFullConfig | null = null;
+      if (storedConfigStr) {
+        try {
+          storedConfig = JSON.parse(storedConfigStr);
+        } catch (e) {
+          console.error("Invalid avatar_config:", e);
+        }
+      }
+
+      if (storedUrl && storedUrl.startsWith("http")) {
+        // Custom image URL
+        avatar = storedUrl;
+        customAvatarImage = storedUrl;
+        avatarConfig = storedConfig || DEFAULT_AVATAR_CONFIG;
+      } else if (storedUrl && storedConfig) {
+        // avatar_url is JSON config string, but have parsed config
+        avatarConfig = storedConfig;
+        avatar = storedUrl; // Keep as JSON string
+        customAvatarImage = null;
+      } else if (storedConfig) {
+        // No URL, use config
+        avatarConfig = storedConfig;
+        avatar = JSON.stringify(storedConfig);
+        customAvatarImage = null;
+      } else {
+        // Default
+        avatarConfig = DEFAULT_AVATAR_CONFIG;
+        avatar = JSON.stringify(DEFAULT_AVATAR_CONFIG);
+        customAvatarImage = null;
+      }
+
+      return {
+        id: data.id,
+        email: data.email ?? "",
+        name: data.name ?? "",
+        avatar,
+        avatarConfig,
+        customAvatarImage,
+      };
+    } catch (error) {
+      console.error("Failed to fetch user profile:", error);
+      return null;
+    }
+  }
 }
 
 // Custom hooks
+const useAuthentication = () => {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  // Check authentication status on mount
+  useEffect(() => {
+    let subscriptionCleanup: (() => void) | null = null;
+
+    const checkAuthStatus = async () => {
+      setIsCheckingAuth(true);
+
+      try {
+        // Check Supabase session
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          // Prioritize database: fetch profile
+          try {
+            const profile = await DatabaseService.fetchUserProfile(
+              session.user.id
+            );
+
+            if (profile) {
+              setAuthUser(profile);
+              saveAuthUser(profile);
+            } else {
+              // Profile not found, sign out
+              await supabase.auth.signOut();
+              setAuthUser(null);
+              clearAuthUser();
+            }
+          } catch (fetchError) {
+            console.error("Error fetching profile:", fetchError);
+            // Fetch failed, sign out to clear stale data
+            await supabase.auth.signOut();
+            setAuthUser(null);
+            clearAuthUser();
+          }
+        } else {
+          // No session, fallback to local storage (cannot verify DB without session)
+          const savedAuthUser = loadAuthUser();
+          if (savedAuthUser) {
+            setAuthUser(savedAuthUser);
+          } else {
+            setAuthUser(null);
+          }
+        }
+      } catch (error) {
+        console.error("Error checking auth status:", error);
+        // On general error, fallback to local if no session check succeeded
+        const savedAuthUser = loadAuthUser();
+        setAuthUser(savedAuthUser);
+      } finally {
+        setIsCheckingAuth(false);
+      }
+
+      // Listen for auth changes
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === "SIGNED_OUT" || !session) {
+          setAuthUser(null);
+          clearAuthUser();
+        } else if (event === "SIGNED_IN" && session?.user) {
+          // Refresh profile data from DB
+          try {
+            const profile = await DatabaseService.fetchUserProfile(
+              session.user.id
+            );
+            if (profile) {
+              setAuthUser(profile);
+              saveAuthUser(profile);
+            } else {
+              await supabase.auth.signOut();
+              setAuthUser(null);
+              clearAuthUser();
+            }
+          } catch (fetchError) {
+            console.error("Error refreshing profile:", fetchError);
+            await supabase.auth.signOut();
+            setAuthUser(null);
+            clearAuthUser();
+          }
+        }
+      });
+
+      subscriptionCleanup = () => subscription.unsubscribe();
+    };
+
+    checkAuthStatus();
+
+    return () => {
+      if (subscriptionCleanup) {
+        subscriptionCleanup();
+      }
+    };
+  }, []);
+
+  const handleAuthSuccess = useCallback((user: AuthUser) => {
+    setAuthUser(user);
+    saveAuthUser(user);
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+      setAuthUser(null);
+      clearAuthUser();
+    } catch (error) {
+      console.error("Error signing out:", error);
+      // Force clear even if sign out fails
+      setAuthUser(null);
+      clearAuthUser();
+    }
+  }, []);
+
+  const openAuthModal = useCallback(() => {
+    setIsAuthModalOpen(true);
+  }, []);
+
+  const closeAuthModal = useCallback(() => {
+    setIsAuthModalOpen(false);
+  }, []);
+
+  // Method to refresh user data from database
+  const refreshUserData = useCallback(async () => {
+    if (!authUser) return;
+
+    try {
+      const updatedUser = await DatabaseService.fetchUserProfile(authUser.id);
+      if (updatedUser) {
+        setAuthUser(updatedUser);
+        saveAuthUser(updatedUser);
+      }
+    } catch (error) {
+      console.error("Failed to refresh user data:", error);
+    }
+  }, [authUser]);
+
+  return {
+    authUser,
+    isAuthModalOpen,
+    isCheckingAuth,
+    openAuthModal,
+    closeAuthModal,
+    handleAuthSuccess,
+    handleSignOut,
+    refreshUserData,
+  };
+};
+
 const useRoomCode = (initialCode?: string) => {
   const [roomCode, setRoomCode] = useState<string>("");
 
@@ -348,7 +749,7 @@ const useRoomCode = (initialCode?: string) => {
       attempts++;
 
       if (attempts >= maxAttempts) {
-        break; // Fallback to prevent infinite loop
+        break;
       }
     } while (await DatabaseService.checkRoomExists(newCode));
 
@@ -421,45 +822,65 @@ const useResponsiveLayout = () => {
   };
 };
 
-const useAvatar = () => {
-  // Load player data from localStorage
-  const savedPlayerData = loadFromLocalStorage<PlayerData | null>(
-    LOCAL_STORAGE_KEYS.PLAYER_DATA,
-    null
-  );
-
-  const [avatarConfig, setAvatarConfig] = useState<AvatarFullConfig>(
-    savedPlayerData?.avatarConfig || DEFAULT_AVATAR_CONFIG
-  );
-  const [customAvatarImage, setCustomAvatarImage] = useState<string | null>(
-    savedPlayerData?.customAvatarImage || null
-  );
-  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState<boolean>(false);
-  const [showAvatarHint, setShowAvatarHint] = useState<boolean>(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowAvatarHint(false);
-    }, AVATAR_HINT_DURATION);
-
-    return () => clearTimeout(timer);
+const useAvatar = (
+  authUser: AuthUser | null,
+  refreshUserData?: () => Promise<void>
+) => {
+  const savedPlayerData = useMemo(() => {
+    return loadFromLocalStorage<PlayerData | null>(
+      LOCAL_STORAGE_KEYS.PLAYER_DATA,
+      null
+    );
   }, []);
 
-  // Save avatar config and custom image to player data
+  const [avatarConfig, setAvatarConfig] = useState<AvatarFullConfig>(
+    authUser?.avatarConfig ||
+      savedPlayerData?.avatarConfig ||
+      DEFAULT_AVATAR_CONFIG
+  );
+  const [customAvatarImage, setCustomAvatarImage] = useState<string | null>(
+    authUser?.customAvatarImage ?? savedPlayerData?.customAvatarImage ?? null
+  );
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState<boolean>(false);
+  const [showAvatarHint, setShowAvatarHint] = useState<boolean>(!authUser);
+
   useEffect(() => {
-    const playerData: PlayerData = {
-      player: savedPlayerData?.player || {
-        id: "",
-        nickname: "",
-        avatar: "",
-        isHost: false,
-      },
-      avatarConfig,
-      customAvatarImage,
-      roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
-    };
-    saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
-  }, [avatarConfig, customAvatarImage, savedPlayerData]);
+    if (authUser) {
+      setAvatarConfig(authUser.avatarConfig ?? DEFAULT_AVATAR_CONFIG);
+      setCustomAvatarImage(authUser.customAvatarImage ?? null);
+      setShowAvatarHint(false);
+    } else {
+      setShowAvatarHint(true);
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    if (showAvatarHint) {
+      const timer = setTimeout(() => {
+        setShowAvatarHint(false);
+      }, AVATAR_HINT_DURATION);
+
+      return () => clearTimeout(timer);
+    }
+  }, [showAvatarHint]);
+
+  useEffect(() => {
+    if (!authUser) {
+      const playerData: PlayerData = {
+        player: savedPlayerData?.player ?? {
+          id: "",
+          nickname: "",
+          avatar: "",
+          isHost: false,
+        },
+        avatarConfig,
+        customAvatarImage,
+        roomSettings: savedPlayerData?.roomSettings,
+        authUser: savedPlayerData?.authUser,
+      };
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+    }
+  }, [avatarConfig, customAvatarImage, authUser, savedPlayerData]);
 
   const openAvatarModal = useCallback(() => {
     setIsAvatarModalOpen(true);
@@ -468,6 +889,41 @@ const useAvatar = () => {
   const closeAvatarModal = useCallback(() => {
     setIsAvatarModalOpen(false);
   }, []);
+
+  const updateAvatarInDatabase = useCallback(
+    async (
+      newAvatarConfig: AvatarFullConfig,
+      newCustomAvatarImage: string | null
+    ) => {
+      if (!authUser) return;
+
+      try {
+        await DatabaseService.updateUserProfile(authUser.id, {
+          avatar_config: newAvatarConfig,
+          avatar_url: newCustomAvatarImage ?? JSON.stringify(newAvatarConfig),
+        });
+
+        // Refresh user data from database to ensure consistency
+        if (refreshUserData) {
+          await refreshUserData();
+        } else {
+          // Fallback: update local auth user data directly
+          const updatedAuthUser: AuthUser = {
+            ...authUser,
+            avatarConfig: newAvatarConfig,
+            customAvatarImage: newCustomAvatarImage,
+            avatar: newCustomAvatarImage ?? JSON.stringify(newAvatarConfig),
+          };
+
+          saveAuthUser(updatedAuthUser);
+        }
+      } catch (error) {
+        console.error("Failed to update avatar in database:", error);
+        throw error;
+      }
+    },
+    [authUser, refreshUserData]
+  );
 
   return {
     avatarConfig,
@@ -478,10 +934,53 @@ const useAvatar = () => {
     showAvatarHint,
     openAvatarModal,
     closeAvatarModal,
+    updateAvatarInDatabase,
   };
 };
 
 // Component parts
+const AuthSection: React.FC<{
+  authUser: AuthUser | null;
+  onSignIn: () => void;
+  onSignOut: () => void;
+}> = ({ authUser, onSignIn, onSignOut }) => (
+  <div className="flex flex-col gap-3 mb-4 lg:mb-6">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2 text-white/70">
+        <FaInfoCircle className="text-sm" />
+        <span className="text-xs lg:text-sm">
+          {authUser
+            ? "Logged in with database"
+            : "Quick play as guest or sign in"}
+        </span>
+      </div>
+
+      <motion.button
+        onClick={authUser ? onSignOut : onSignIn}
+        className={`flex items-center gap-2 px-3 py-2 lg:px-4 lg:py-2 rounded-xl font-medium transition-colors text-sm lg:text-base ${
+          authUser
+            ? "bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-500/30"
+            : "bg-[#FF6B35] text-white hover:bg-[#FF7A47] shadow-lg"
+        }`}
+        {...animationVariants.authButton}
+      >
+        {authUser ? (
+          <>
+            <FaSignOutAlt className="text-xs lg:text-sm" />
+            <span>Sign Out</span>
+          </>
+        ) : (
+          <>
+            <FaSignInAlt className="text-xs lg:text-sm" />
+            <span>Sign In</span>
+          </>
+        )}
+      </motion.button>
+    </div>
+
+  </div>
+);
+
 const TabNavigation: React.FC<{
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
@@ -541,96 +1040,172 @@ const TabContent: React.FC<{
 const UserProfile: React.FC<{
   nickname: string;
   onNicknameChange: (nickname: string) => void;
+  onNicknameUpdate?: (newNickname: string) => void;
   avatarConfig: AvatarFullConfig;
   customAvatarImage: string | null;
   showAvatarHint: boolean;
   onAvatarClick: () => void;
+  authUser: AuthUser | null;
   t: any;
 }> = ({
   nickname,
   onNicknameChange,
+  onNicknameUpdate,
   avatarConfig,
   customAvatarImage,
   showAvatarHint,
   onAvatarClick,
+  authUser,
   t,
-}) => (
-  <div className="flex justify-center items-center gap-4 mb-4">
-    <motion.div className="flex items-center gap-3 lg:gap-4 relative">
-      <motion.div
-        className="w-12 h-12 lg:w-16 lg:h-16 rounded-full bg-white/10 flex items-center justify-center border-2 border-white/20 cursor-pointer relative"
-        onClick={onAvatarClick}
-        whileHover={animationVariants.avatarContainer.whileHover}
-        animate={
-          showAvatarHint
-            ? {
-                boxShadow: [
-                  "0 0 0 0 #FF6B35B3", // #FF6B35 with 70% opacity (B3 = 70% in hex)
-                  "0 0 0 10px transparent",
-                  "0 0 0 0 transparent",
-                ],
-              }
-            : undefined
-        }
-        transition={
-          showAvatarHint
-            ? {
-                duration: 2,
-                repeat: Infinity,
-                repeatDelay: 1,
-              }
-            : undefined
-        }
-      >
-        {customAvatarImage ? (
-          <img
-            src={customAvatarImage}
-            alt="User avatar"
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <Avatar className="w-full h-full" {...avatarConfig} />
-        )}
+}) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [tempNickname, setTempNickname] = useState(nickname);
 
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity duration-300 rounded-full">
-          <FaEye className="text-white text-lg lg:text-xl" />
-        </div>
+  const handleNicknameSubmit = () => {
+    if (tempNickname.trim() && tempNickname !== nickname) {
+      onNicknameChange(tempNickname);
+      if (onNicknameUpdate && authUser) {
+        onNicknameUpdate(tempNickname);
+      }
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleNicknameSubmit();
+    } else if (e.key === "Escape") {
+      setTempNickname(nickname);
+      setIsEditing(false);
+    }
+  };
+
+  return (
+    <div className="flex justify-center items-center gap-4 mb-4">
+      <motion.div className="flex items-center gap-3 lg:gap-4 relative">
+        <motion.div
+          className="w-12 h-12 lg:w-16 lg:h-16 rounded-full bg-white/10 flex items-center justify-center border-2 border-white/20 cursor-pointer relative"
+          onClick={onAvatarClick}
+          whileHover={animationVariants.avatarContainer.whileHover}
+          animate={
+            showAvatarHint && !authUser
+              ? {
+                  boxShadow: [
+                    "0 0 0 0 #FF6B35B3",
+                    "0 0 0 10px transparent",
+                    "0 0 0 0 transparent",
+                  ],
+                }
+              : undefined
+          }
+          transition={
+            showAvatarHint && !authUser
+              ? {
+                  duration: 2,
+                  repeat: Infinity,
+                  repeatDelay: 1,
+                }
+              : undefined
+          }
+        >
+          {customAvatarImage?.startsWith("http") ? (
+            <img
+              src={customAvatarImage}
+              alt="User avatar"
+              className="w-full h-full object-cover rounded-full"
+              onError={(e) => {
+                // Fallback to generated avatar if image fails to load
+                const target = e.target as HTMLImageElement;
+                target.style.display = "none";
+                const avatarContainer = target.parentElement;
+                if (avatarContainer) {
+                  const fallbackAvatar = document.createElement("div");
+                  fallbackAvatar.className = "w-full h-full";
+                  avatarContainer.appendChild(fallbackAvatar);
+                }
+              }}
+            />
+          ) : (
+            <Avatar
+              className="w-full h-full"
+              {...(authUser?.avatarConfig ?? avatarConfig)}
+              style={{ width: "100%", height: "100%" }}
+            />
+          )}
+
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity duration-300 rounded-full">
+            <FaEye className="text-white text-lg lg:text-xl" />
+          </div>
+
+          {authUser && (
+            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white flex items-center justify-center">
+              <FaUser className="text-white text-xs" />
+            </div>
+          )}
+        </motion.div>
+
+        <AnimatePresence>
+          {showAvatarHint && !authUser && (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.5 }}
+              className="absolute bottom-3 -left-20 text-white text-sx py-1 px-2 rounded-lg whitespace-nowrap"
+            >
+              <motion.div
+                animate={{ x: [0, 5, 0] }}
+                transition={{ duration: 1, repeat: Infinity }}
+              >
+                <div className="flex items-center gap-1">
+                  <span>Change</span>
+                  <FaChevronRight className="text-xs" />
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
 
-      <AnimatePresence>
-        {showAvatarHint && (
-          <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -10 }}
-            transition={{ duration: 0.5 }}
-            className="absolute bottom-3 -left-20 text-white text-sx py-1 px-2 rounded-lg whitespace-nowrap"
-          >
+      <div className="space-y-2 flex-1">
+        <div className="relative">
+          {isEditing ? (
+            <motion.input
+              value={tempNickname}
+              onChange={(e) => setTempNickname(e.target.value)}
+              onBlur={handleNicknameSubmit}
+              onKeyPress={handleKeyPress}
+              placeholder={t.yourName ?? "Your Name"}
+              className="w-full rounded-xl lg:rounded-2xl border border-white/10 bg-white/10 px-3 py-2 lg:px-4 lg:py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all text-sm lg:text-base"
+              autoFocus
+              {...animationVariants.inputField}
+            />
+          ) : (
             <motion.div
-              animate={{ x: [0, 5, 0] }}
-              transition={{ duration: 1, repeat: Infinity }}
+              className="w-full rounded-xl lg:rounded-2xl border border-white/10 bg-white/10 px-3 py-2 lg:px-4 lg:py-3 text-white cursor-pointer hover:bg-white/15 transition-colors"
+              onClick={() => setIsEditing(true)}
+              whileHover={{ scale: 1.01 }}
             >
-              <div className="flex items-center gap-1">
-                <span>Change</span>
-                <FaChevronRight className="text-xs" />
+              <div className="flex justify-between items-center">
+                <span className="truncate">
+                  {nickname ?? t.yourName ?? "Your Name"}
+                </span>
+                {authUser && (
+                  <span className="text-xs text-white/50 bg-white/10 px-2 py-1 rounded-lg">
+                    Click to edit
+                  </span>
+                )}
               </div>
             </motion.div>
-          </motion.div>
+          )}
+        </div>
+        {authUser && (
+          <p className="text-white/60 text-xs">Logged in as {authUser.email}</p>
         )}
-      </AnimatePresence>
-    </motion.div>
-
-    <div className="space-y-2">
-      <motion.input
-        value={nickname}
-        onChange={(e) => onNicknameChange(e.target.value)}
-        placeholder={t.yourName}
-        className="w-full rounded-xl lg:rounded-2xl border border-white/10 bg-white/10 px-3 py-2 lg:px-4 lg:py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all text-sm lg:text-base"
-        {...animationVariants.inputField}
-      />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // Main Component
 const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
@@ -646,6 +1221,16 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
   const { copied, copyToClipboard } = useClipboard();
   const { isMobileMenuOpen, toggleMobileMenu } = useResponsiveLayout();
   const {
+    authUser,
+    isAuthModalOpen,
+    isCheckingAuth,
+    openAuthModal,
+    closeAuthModal,
+    handleAuthSuccess,
+    handleSignOut,
+    refreshUserData,
+  } = useAuthentication();
+  const {
     avatarConfig,
     setAvatarConfig,
     customAvatarImage,
@@ -654,19 +1239,22 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     showAvatarHint,
     openAvatarModal,
     closeAvatarModal,
-  } = useAvatar();
+    updateAvatarInDatabase,
+  } = useAvatar(authUser, refreshUserData);
   const router = useRouter();
 
   // Load player data from localStorage
-  const savedPlayerData = loadFromLocalStorage<PlayerData | null>(
-    LOCAL_STORAGE_KEYS.PLAYER_DATA,
-    null
-  );
+  const savedPlayerData = useMemo(() => {
+    return loadFromLocalStorage<PlayerData | null>(
+      LOCAL_STORAGE_KEYS.PLAYER_DATA,
+      null
+    );
+  }, []);
 
   // Local state
   const [mounted, setMounted] = useState<boolean>(false);
   const [nickname, setNickname] = useState<string>(
-    initialNickname || savedPlayerData?.player.nickname || ""
+    initialNickname ?? authUser?.name ?? savedPlayerData?.player?.nickname ?? ""
   );
   const [joinCode, setJoinCode] = useState<string>("");
   const [isPasswordProtected, setIsPasswordProtected] =
@@ -684,21 +1272,28 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
   const [joinPassword, setJoinPassword] = useState<string>("");
   const [passwordError, setPasswordError] = useState<string>("");
 
+  // Update nickname when authUser changes
+  useEffect(() => {
+    if (authUser) {
+      setNickname(authUser.name);
+    } else if (!initialNickname) {
+      // Only load from localStorage once, not on every render
+      const playerData = loadFromLocalStorage<PlayerData | null>(
+        LOCAL_STORAGE_KEYS.PLAYER_DATA,
+        null
+      );
+      const savedNickname = playerData?.player?.nickname;
+      if (savedNickname) {
+        setNickname(savedNickname);
+      }
+    }
+  }, [authUser, initialNickname]);
+
   // Load room settings when component mounts
   useEffect(() => {
     const savedSettings = loadRoomSettings();
     if (savedSettings) {
-      // Only apply settings if they match the current room code (if we have one)
       if (!initialRoomCode || savedSettings.roomCode === initialRoomCode) {
-        if (savedSettings.gameModeId) {
-          // You'll need to implement a way to get GameMode by ID
-          // For now, we'll just set the ID and let the selectors handle it
-          // setSelectedGameMode(findGameModeById(savedSettings.gameModeId));
-        }
-        if (savedSettings.quizPackId) {
-          // You'll need to implement a way to get QuizPack by ID
-          // setSelectedPack(findQuizPackById(savedSettings.quizPackId));
-        }
         if (savedSettings.password) {
           setRoomPassword(savedSettings.password);
           setIsPasswordProtected(true);
@@ -707,30 +1302,33 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     }
   }, [initialRoomCode]);
 
-  // Save player data to localStorage whenever it changes
+  // Save player data to localStorage whenever it changes (only for non-authenticated users)
   useEffect(() => {
-    const playerData: PlayerData = {
-      player: {
-        id: savedPlayerData?.player.id || "",
-        nickname,
-        avatar: customAvatarImage || JSON.stringify(avatarConfig),
-        isHost: savedPlayerData?.player.isHost || false,
-      },
-      avatarConfig,
-      customAvatarImage,
-      roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
-    };
-    saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
-  }, [nickname, avatarConfig, customAvatarImage, savedPlayerData]);
+    if (!authUser) {
+      const playerData: PlayerData = {
+        player: {
+          id: savedPlayerData?.player.id ?? generateUniqueId(),
+          nickname,
+          avatar: customAvatarImage ?? JSON.stringify(avatarConfig),
+          isHost: savedPlayerData?.player.isHost ?? false,
+          isAuthenticated: false,
+        },
+        avatarConfig,
+        customAvatarImage,
+        roomSettings: savedPlayerData?.roomSettings,
+      };
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+    }
+  }, [nickname, avatarConfig, customAvatarImage, authUser, savedPlayerData]);
 
-  // Save room settings when password changes (only if not empty)
+  // Save room settings when password changes
   useEffect(() => {
     if (roomCode && roomPassword && roomPassword.trim() !== "") {
       const roomSettings: RoomSettings = {
         roomCode,
         password: roomPassword,
-        gameModeId: selectedGameMode?.id || null,
-        quizPackId: selectedPack?.id || null,
+        gameModeId: selectedGameMode?.id ?? null,
+        quizPackId: selectedPack?.id ?? null,
         createdAt: Date.now(),
       };
       saveRoomSettings(roomSettings);
@@ -771,8 +1369,49 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     setNickname(newNickname);
   }, []);
 
+  const handleNicknameUpdate = useCallback(
+    async (newNickname: string) => {
+      if (!authUser) return;
+
+      try {
+        await DatabaseService.updateUserProfile(authUser.id, {
+          name: newNickname,
+        });
+
+        // Refresh user data from database to ensure consistency
+        await refreshUserData();
+      } catch (error) {
+        console.error("Failed to update nickname in database:", error);
+      }
+    },
+    [authUser, refreshUserData]
+  );
+
+  const handleAvatarSave = useCallback(
+    async (
+      newAvatarConfig: AvatarFullConfig,
+      newCustomAvatarImage: string | null
+    ) => {
+      setAvatarConfig(newAvatarConfig);
+      setCustomAvatarImage(newCustomAvatarImage);
+
+      // Update in database if user is authenticated
+      if (authUser) {
+        try {
+          await updateAvatarInDatabase(newAvatarConfig, newCustomAvatarImage);
+        } catch (error) {
+          console.error("Failed to update avatar in database:", error);
+          // Still keep local changes even if database update fails
+        }
+      }
+    },
+    [authUser, updateAvatarInDatabase]
+  );
+
   const handleCreateRoom = useCallback(async () => {
-    if (!validateNickname(nickname)) {
+    const currentNickname = authUser ? authUser.name : nickname;
+
+    if (!validateNickname(currentNickname)) {
       alert("Please enter your nickname");
       return;
     }
@@ -785,10 +1424,11 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     setIsCreating(true);
     try {
       const player = createPlayerData(
-        nickname,
+        currentNickname,
         avatarConfig,
         customAvatarImage,
-        true // isHost = true when creating room
+        true,
+        authUser ?? undefined
       );
 
       // Update player data with host status
@@ -796,7 +1436,8 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         player,
         avatarConfig,
         customAvatarImage,
-        roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
+        roomSettings: savedPlayerData?.roomSettings,
+        authUser: authUser ?? undefined,
       };
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
 
@@ -808,13 +1449,13 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         isPasswordProtected && roomPassword ? roomPassword : null
       );
 
-      // Save room settings before navigating (only if password is not empty)
+      // Save room settings before navigating
       if (isPasswordProtected && roomPassword && roomPassword.trim() !== "") {
         const roomSettings: RoomSettings = {
           roomCode,
           password: roomPassword,
-          gameModeId: selectedGameMode?.id || null,
-          quizPackId: selectedPack?.id || null,
+          gameModeId: selectedGameMode?.id ?? null,
+          quizPackId: selectedPack?.id ?? null,
           createdAt: Date.now(),
         };
         saveRoomSettings(roomSettings);
@@ -832,6 +1473,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
       setIsCreating(false);
     }
   }, [
+    authUser,
     nickname,
     roomCode,
     avatarConfig,
@@ -846,14 +1488,17 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     savedPlayerData,
   ]);
 
-  const proceedWithJoin = async (roomCode: string, password?: string) => {
+  const proceedWithJoin = async (roomCodeToJoin: string, password?: string) => {
     setIsJoining(true);
+    const currentNickname = authUser ? authUser.name : nickname;
+
     try {
       const player = createPlayerData(
-        nickname,
+        currentNickname,
         avatarConfig,
         customAvatarImage,
-        false // isHost = false when joining room
+        false,
+        authUser ?? undefined
       );
 
       // Update player data with guest status
@@ -861,25 +1506,26 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         player,
         avatarConfig,
         customAvatarImage,
-        roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
+        roomSettings: savedPlayerData?.roomSettings,
+        authUser: authUser ?? undefined,
       };
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
 
-      await DatabaseService.joinRoom(roomCode, player);
+      await DatabaseService.joinRoom(roomCodeToJoin, player);
 
       // Save room settings if password was provided and not empty
-      if (password && password.trim() !== "") {
+      if (password?.trim()) {
         const roomSettings: RoomSettings = {
-          roomCode,
+          roomCode: roomCodeToJoin,
           password,
-          gameModeId: null, // Will be loaded from room data later
-          quizPackId: null, // Will be loaded from room data later
+          gameModeId: null,
+          quizPackId: null,
           createdAt: Date.now(),
         };
         saveRoomSettings(roomSettings);
       }
 
-      router.push(`/lobby/${roomCode}`);
+      router.push(`/lobby/${roomCodeToJoin}`);
     } catch (error) {
       console.error("Failed to join room:", error);
       const errorMessage =
@@ -893,7 +1539,9 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
   };
 
   const handleJoinRoom = useCallback(async () => {
-    if (!validateNickname(nickname)) {
+    const currentNickname = authUser ? authUser.name : nickname;
+
+    if (!validateNickname(currentNickname)) {
       alert("Please enter your nickname");
       return;
     }
@@ -942,7 +1590,14 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
       console.error("Error checking room password:", error);
       alert("Failed to check room. Please try again.");
     }
-  }, [nickname, joinCode, validateNickname, validateRoomCode]);
+  }, [
+    authUser,
+    nickname,
+    joinCode,
+    validateNickname,
+    validateRoomCode,
+    savedPlayerData,
+  ]);
 
   const handlePasswordSubmit = async () => {
     try {
@@ -963,21 +1618,45 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
   };
 
   // Loading state
-  if (!mounted) {
+  if (!mounted || isCheckingAuth) {
     return (
-      <div className="h-screen w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900" />
+      <div className="h-screen w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+        <div className="text-white text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
     );
   }
 
   return (
     <div className="relative min-h-screen w-full font-sans flex flex-col overflow-x-hidden">
-      <Header />
+      {/* Header */}
+      <div className="flex items-center justify-between p-4">
+        <Header />
+      </div>
 
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={closeAuthModal}
+        onAuthSuccess={handleAuthSuccess}
+      />
+
+      {/* Avatar Customization Modal */}
       <AvatarCustomModal
         isOpen={isAvatarModalOpen}
         onClose={closeAvatarModal}
         avatarConfig={avatarConfig}
-        setAvatarConfig={setAvatarConfig}
+        setAvatarConfig={(value: React.SetStateAction<AvatarFullConfig>) => {
+          const newConfig =
+            typeof value === "function"
+              ? (value as (prev: AvatarFullConfig) => AvatarFullConfig)(
+                  avatarConfig
+                )
+              : value;
+          handleAvatarSave(newConfig, customAvatarImage);
+        }}
         customAvatarImage={customAvatarImage}
         setCustomAvatarImage={setCustomAvatarImage}
       />
@@ -1041,7 +1720,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className=" mx-auto w-full max-w-7xl grid grid-cols-1 gap-4 px-4 pb-4 lg:grid-cols-12 lg:mt-0"
+        className="mx-auto w-full max-w-7xl grid grid-cols-1 gap-4 px-4 pb-4 lg:grid-cols-12 lg:mt-0"
       >
         {/* Mobile Toggle */}
         <motion.div variants={fadeUp} className="lg:hidden">
@@ -1123,15 +1802,24 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         {/* Main Content Panel */}
         <motion.section variants={slideInRight} className="lg:col-span-8">
           <motion.div className="rounded-2xl lg:rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-4 lg:p-6 shadow-2xl backdrop-blur-md relative">
+            {/* Auth Section */}
+            <AuthSection
+              authUser={authUser}
+              onSignIn={openAuthModal}
+              onSignOut={handleSignOut}
+            />
+
             {/* User Profile */}
             <motion.div variants={fadeUp}>
               <UserProfile
                 nickname={nickname}
                 onNicknameChange={handleNicknameChange}
+                onNicknameUpdate={handleNicknameUpdate}
                 avatarConfig={avatarConfig}
                 customAvatarImage={customAvatarImage}
                 showAvatarHint={showAvatarHint}
                 onAvatarClick={openAvatarModal}
+                authUser={authUser}
                 t={t}
               />
             </motion.div>
@@ -1139,7 +1827,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
             {/* Create Room */}
             <div className="mb-4 lg:mb-6 space-y-2">
               <label className="block text-sm font-medium text-[#EAEAEA]">
-                {t.createRoom}
+                {t.createRoom ?? "Create Room"}
               </label>
               <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 mb-2">
                 <motion.div
@@ -1149,7 +1837,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
                   <motion.input
                     value={roomCode}
                     onChange={(e) => updateRoomCode(e.target.value)}
-                    placeholder={t.roomCodePlaceholder}
+                    placeholder={t.roomCodePlaceholder ?? "Enter room code"}
                     className="w-full rounded-xl lg:rounded-2xl border border-white/10 bg-white/10 px-3 py-2 lg:px-4 lg:py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all text-sm lg:text-base"
                     whileFocus={{ borderColor: "rgba(255, 107, 53, 0.5)" }}
                   />
@@ -1190,7 +1878,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
                   <motion.div whileHover={{ rotate: 90 }}>
                     <FaPlus className="text-xs lg:text-sm" />
                   </motion.div>
-                  {isCreating ? "Creating..." : t.create}
+                  {isCreating ? "Creating..." : t.create ?? "Create"}
                 </motion.button>
               </div>
 
@@ -1208,7 +1896,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
                   className="text-sm text-[#EAEAEA] cursor-pointer"
                   whileHover={{ color: "#FFFFFF" }}
                 >
-                  {t.setPassword}
+                  {t.setPassword ?? "Set Password"}
                 </motion.label>
               </motion.div>
 
@@ -1222,7 +1910,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
                       type="password"
                       value={roomPassword}
                       onChange={(e) => setRoomPassword(e.target.value)}
-                      placeholder={t.roomPassword}
+                      placeholder={t.roomPassword ?? "Room Password"}
                       className="w-full rounded-xl lg:rounded-2xl border border-white/10 bg-white/10 px-3 py-2 lg:px-4 lg:py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all text-sm lg:text-base"
                       whileFocus={{ scale: 1.02 }}
                     />
@@ -1234,13 +1922,13 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
             {/* Join Room */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-[#EAEAEA]">
-                {t.joinRoom}
+                {t.joinRoom ?? "Join Room"}
               </label>
               <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
                 <motion.input
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                  placeholder={t.enterRoomCode}
+                  placeholder={t.enterRoomCode ?? "Enter room code"}
                   className="flex-1 rounded-xl lg:rounded-2xl border border-white/10 bg-white/10 px-3 py-2 lg:px-4 lg:py-3 text-white placeholder:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 transition-all text-sm lg:text-base"
                   {...animationVariants.inputField}
                 />
@@ -1260,7 +1948,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
                   >
                     <FaDoorOpen className="text-xs lg:text-sm" />
                   </motion.div>
-                  {isJoining ? "Joining..." : t.join}
+                  {isJoining ? "Joining..." : t.join ?? "Join"}
                 </motion.button>
               </div>
             </div>
@@ -1270,5 +1958,5 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     </div>
   );
 };
-
+//grok ok
 export default QuizAttackStart;

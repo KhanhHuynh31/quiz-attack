@@ -857,8 +857,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
                 ? "Verifying..."
                 : isLoading
                 ? t.loading
-                : playerCount < 1
-                ? t.needPlayers
                 : t.startGame}
             </span>
           </div>

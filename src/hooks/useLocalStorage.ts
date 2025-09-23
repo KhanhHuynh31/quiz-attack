@@ -45,25 +45,3 @@ export function loadPlayerData(): PlayerData | null {
     return null;
   }
 }
-
-/**
- * Save player data vào localStorage
- */
-export function savePlayerData(data: PlayerData): void {
-  if (typeof window === "undefined") return; // tránh lỗi khi SSR trong Next.js
-
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (err) {
-    console.error("Failed to save player data", err);
-  }
-}
-
-/**
- * Xoá player data khỏi localStorage
- */
-export function clearPlayerData(): void {
-  if (typeof window === "undefined") return;
-
-  localStorage.removeItem(STORAGE_KEY);
-}
