@@ -8,7 +8,6 @@ export const DEFAULT_QUIZ_PACKS: QuizPack[] = [
     questionCount: 5,
     category: "Tổng hợp",
     author: "official",
-    questions: [],
   },
   {
     id: 2,
@@ -17,6 +16,5 @@ export const DEFAULT_QUIZ_PACKS: QuizPack[] = [
     questionCount: 10,
     category: "Khoa học",
     author: "official",
-    questions: [],
   },
 ];
