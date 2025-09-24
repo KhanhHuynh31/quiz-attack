@@ -4,8 +4,8 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaBook, FaPlus, FaCheck } from "react-icons/fa";
 import Link from "next/link";
-import { DEFAULT_QUIZ_PACKS } from "@/data/quizData";
 import { QuizPack } from "@/types/type";
+import { supabase } from "@/lib/supabaseClient";
 
 interface QuizPackItemProps {
   pack: QuizPack;
@@ -87,7 +87,11 @@ const QuizPackItem: React.FC<QuizPackItemProps> = ({
           </motion.span>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-blue-400">{pack.author}</span>
+            <span className={`text-xs ${
+              pack.author === "official" ? "text-yellow-400" : "text-blue-400"
+            }`}>
+              {pack.author === "official" ? "Chính thức" : pack.author || "Cộng đồng"}
+            </span>
             <AnimatePresence>
               {isSelected && (
                 <motion.div
@@ -111,7 +115,7 @@ const QuizPackItem: React.FC<QuizPackItemProps> = ({
 interface QuizPackSelectorProps {
   selectedPack: QuizPack | null;
   onPackSelect: (pack: QuizPack) => void;
-  customPacks?: QuizPack[]; // Thêm prop để truyền custom packs từ bên ngoài
+  customPacks?: QuizPack[];
 }
 
 export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
@@ -119,26 +123,97 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
   onPackSelect,
   customPacks = [],
 }) => {
-  // Kết hợp default packs và custom packs
-  const allPacks = [...DEFAULT_QUIZ_PACKS, ...customPacks];
+  const [dbPacks, setDbPacks] = useState<QuizPack[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch quiz packs từ database
+  const fetchQuizPacks = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      
+      // Lấy danh sách quiz packs từ database
+      const { data: packsData, error: packsError } = await supabase
+        .from("quiz_packs")
+        .select("*")
+        .order("id", { ascending: false });
+
+      if (packsError) throw packsError;
+
+      if (!packsData) {
+        setDbPacks([]);
+        return;
+      }
+
+      // Chuyển đổi dữ liệu từ database sang QuizPack type
+      const convertedPacks: QuizPack[] = await Promise.all(
+        packsData.map(async (pack) => {
+          // Đếm số câu hỏi thực tế cho mỗi pack
+          const { count: questionCount, error: countError } = await supabase
+            .from("quiz_questions")
+            .select("id", { count: "exact" })
+            .eq("quiz_pack_id", pack.id);
+
+          if (countError) {
+            console.error("Error counting questions:", countError);
+          }
+
+          return {
+            id: pack.id,
+            name: pack.name,
+            description: pack.description,
+            category: pack.category,
+            author: pack.author,
+            questionCount: questionCount || pack.question_count || 0,
+            isHidden: false
+          };
+        })
+      );
+
+      setDbPacks(convertedPacks);
+    } catch (error) {
+      console.error("Error fetching quiz packs:", error);
+      setDbPacks([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchQuizPacks();
+  }, []);
+
+  // Kết hợp dbPacks và customPacks
+  const allPacks = [...dbPacks, ...customPacks];
 
   // Đảm bảo luôn có một pack được chọn mặc định
   useEffect(() => {
-    if (!selectedPack && allPacks.length > 0) {
-      // Tìm pack đầu tiên không bị ẩn
-      const firstVisiblePack = allPacks.find((pack) => !pack.isHidden);
+    if (!selectedPack && allPacks.length > 0 && !loading) {
+      // Ưu tiên chọn pack chính thức đầu tiên, nếu không có thì chọn pack đầu tiên
+      const firstOfficialPack = allPacks.find((pack) => pack.author === "official");
+      const firstVisiblePack = firstOfficialPack || allPacks.find((pack) => !pack.isHidden);
+      
       if (firstVisiblePack) {
         onPackSelect(firstVisiblePack);
       }
     }
-  }, [selectedPack, allPacks, onPackSelect]);
+  }, [selectedPack, allPacks, loading, onPackSelect]);
 
   const handleSelectPack = (pack: QuizPack) => {
-    // Không cho phép bỏ chọn, chỉ cho phép chọn pack khác
     if (selectedPack?.id !== pack.id) {
       onPackSelect(pack);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="max-h-96 overflow-y-auto flex items-center justify-center py-8">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-2"></div>
+          <p className="text-white/60 text-sm">Đang tải quiz packs...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -174,6 +249,17 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
               />
             ))}
         </motion.div>
+
+        {/* Empty State */}
+        {allPacks.filter((p) => !p.isHidden).length === 0 && (
+          <div className="text-center py-8">
+            <FaBook className="w-12 h-12 text-white/40 mx-auto mb-4" />
+            <p className="text-white/60 text-sm">Chưa có quiz pack nào</p>
+            <p className="text-white/40 text-xs mt-1">Hãy tạo quiz pack đầu tiên của bạn</p>
+          </div>
+        )}
+
+        {/* Add Custom Pack Button */}
         <motion.button
           whileHover={{ scale: 1.01, y: -2 }}
           whileTap={{ scale: 0.95 }}
@@ -188,7 +274,7 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
             className="w-auto inline-flex items-center space-x-2 px-3"
           >
             <FaPlus className="text-green-400" />
-            <span>Add Custom Pack</span>
+            <span>Tạo Quiz Pack Mới</span>
           </Link>
         </motion.button>
       </motion.div>

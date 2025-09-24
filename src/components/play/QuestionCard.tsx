@@ -85,7 +85,6 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
 
   return (
     <motion.div
-      className="w-full lg:w-2/4 rounded-3xl border border-white/10 bg-gradient-to-b from-white/10 to-white/5 p-6 shadow-2xl shadow-black/40 backdrop-blur-md overflow-auto"
       initial={{ scale: 0.9 }}
       animate={{ scale: 1 }}
       transition={{ duration: 0.5 }}

@@ -65,7 +65,7 @@ export interface QuizPack {
   category: string;
   questionCount: number;
   author: string;
-  questions: any[]; // Or a more specific type if you have one
+  // questions: any[]; // Or a more specific type if you have one
   isHidden?: boolean;
 }
 
@@ -109,6 +109,7 @@ export interface ActiveCardEffect {
   duration?: number;
   startTime: number;
   targetPlayer?: number; // 1 for current player, others for opponents
+  expiresAtQuestionEnd?: boolean;
 }
 
 export interface GameModifiers {

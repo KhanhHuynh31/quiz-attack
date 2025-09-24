@@ -46,3 +46,39 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(55, 48, 163, 0.8);
 }
+.css-blur {
+  filter: blur(4px);
+}
+.css-shake {
+  animation: shake 0.1s infinite;
+}
+
+@keyframes shake {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-10px);
+  }
+  50% {
+    transform: translateX(10px);
+  }
+  75% {
+    transform: translateX(-10px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+@keyframes spin360 {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.spin-360 {
+  animation: spin360 2s linear infinite;
+}

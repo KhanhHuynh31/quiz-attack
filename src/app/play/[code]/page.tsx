@@ -35,7 +35,6 @@ import ErrorState from "@/components/play/ErrorState";
 import Timer from "@/components/play/Timer";
 import PlayerList from "@/components/play/Playlist";
 import QuestionCard from "@/components/play/QuestionCard";
-import CardLog from "@/components/play/CardLog";
 import PlayerHand from "@/components/play/PlayerHand";
 import CardAnimation from "@/components/play/CardAnimation";
 import ConfigViewer from "@/components/play/ConfigViewer";
@@ -43,6 +42,7 @@ import PauseOverlay from "@/components/play/PauseOverPlay";
 import GameOver from "@/components/play/GameOver";
 import { supabase } from "@/lib/supabaseClient";
 import { loadPlayerData } from "@/hooks/useLocalStorage";
+import CardLogAndChat from "@/components/play/CardLog";
 
 type PlayerPresence = Player & { presence_ref: string };
 
@@ -61,7 +61,8 @@ const QuizGame = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [pausedBy, setPausedBy] = useState<string>("");
   const [activeCards, setActiveCards] = useState<ActiveCard[]>([]);
-  const [showLeaderboardAfterAnswer, setShowLeaderboardAfterAnswer] = useState(false);
+  const [showLeaderboardAfterAnswer, setShowLeaderboardAfterAnswer] =
+    useState(false);
   const [usedCardsLog, setUsedCardsLog] = useState<CardUsage[]>([]);
   const [isDrawingCard, setIsDrawingCard] = useState(false);
   const [drawnCard, setDrawnCard] = useState<Card | null>(null);
@@ -113,34 +114,32 @@ const QuizGame = () => {
     };
   }, [showLeaderboardAfterAnswer, showCorrectAnswer, gameOver]);
 
-  const allCards = useMemo(
-    () =>
-      powerCards.map((card: Card) => ({
-        id: card.id || 0,
-        name: card.name,
-        description: card.description,
-        color: card.color,
-        emoji: card.emoji,
-        type: card.type,
-        uniqueId:
-          card.uniqueId ||
-          `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      })),
-    []
-  );
+  // Lọc thẻ dựa trên setting của game
+  const allowedCards = useMemo(() => {
+    if (
+      !config?.gameSettings.allowedCards ||
+      config.gameSettings.allowedCards.length === 0
+    ) {
+      return powerCards;
+    }
+    return powerCards.filter((card) =>
+      config.gameSettings.allowedCards.includes(String(card.id))
+    );
+  }, [config?.gameSettings.allowedCards]);
 
-  const maxQuestions = config?.gameSettings.numberOfQuestion || questions.length;
+  const maxQuestions =
+    config?.gameSettings.numberOfQuestion || questions.length;
   const currentQuestion = questions[currentQuestionIndex];
 
   const sortedPlayers = useMemo(() => {
     const sorted = [...players].sort((a, b) => b.score - a.score);
-    const currentOrder = sorted.map(p => `${p.id}-${p.score}`).join(',');
-    
+    const currentOrder = sorted.map((p) => `${p.id}-${p.score}`).join(",");
+
     if (currentOrder !== previousPlayerOrderRef.current) {
       previousPlayerOrderRef.current = currentOrder;
       return sorted;
     }
-    
+
     return previousPlayerOrderRef.current ? sorted : sorted;
   }, [players]);
 
@@ -164,7 +163,9 @@ const QuizGame = () => {
 
   const allPlayersAnsweredMemo = useMemo(() => {
     if (players.length === 0) return false;
-    return players.filter(player => player.hasAnswered).length === players.length;
+    return (
+      players.filter((player) => player.hasAnswered).length === players.length
+    );
   }, [players]);
 
   useEffect(() => {
@@ -184,40 +185,44 @@ const QuizGame = () => {
     [redirectToHome]
   );
 
-  const updatePlayersWithOptimization = useCallback((updater: (prev: Player[]) => Player[]) => {
-    setPlayers(prevPlayers => {
-      const newPlayers = updater(prevPlayers);
-      
-      const hasChanges = JSON.stringify(prevPlayers) !== JSON.stringify(newPlayers);
-      if (isHost && hasChanges) {
-        const saveToDatabase = async () => {
-          try {
-            const playerList = newPlayers.map((player) =>
-              JSON.stringify({
-                id: player.id,
-                nickname: player.nickname,
-                avatar: player.avatar,
-                score: player.score,
-                cards: player.cards,
-                isHost: player.isHost || false,
-              })
-            );
+  const updatePlayersWithOptimization = useCallback(
+    (updater: (prev: Player[]) => Player[]) => {
+      setPlayers((prevPlayers) => {
+        const newPlayers = updater(prevPlayers);
 
-            await supabase
-              .from("room")
-              .update({ player_list: playerList })
-              .eq("room_code", roomCode);
-          } catch (error) {
-            console.error("Error saving player scores:", error);
-          }
-        };
-        
-        saveToDatabase();
-      }
-      
-      return newPlayers;
-    });
-  }, [isHost, roomCode]);
+        const hasChanges =
+          JSON.stringify(prevPlayers) !== JSON.stringify(newPlayers);
+        if (isHost && hasChanges) {
+          const saveToDatabase = async () => {
+            try {
+              const playerList = newPlayers.map((player) =>
+                JSON.stringify({
+                  id: player.id,
+                  nickname: player.nickname,
+                  avatar: player.avatar,
+                  score: player.score,
+                  cards: player.cards,
+                  isHost: player.isHost || false,
+                })
+              );
+
+              await supabase
+                .from("room")
+                .update({ player_list: playerList })
+                .eq("room_code", roomCode);
+            } catch (error) {
+              console.error("Error saving player scores:", error);
+            }
+          };
+
+          saveToDatabase();
+        }
+
+        return newPlayers;
+      });
+    },
+    [isHost, roomCode]
+  );
 
   const loadPlayerScoresFromDatabase = useCallback(async () => {
     try {
@@ -232,7 +237,8 @@ const QuizGame = () => {
         return {};
       }
 
-      const playerScores: { [key: number]: { score: number; cards: number } } = {};
+      const playerScores: { [key: number]: { score: number; cards: number } } =
+        {};
 
       roomData.player_list.forEach((playerJson: string) => {
         try {
@@ -409,30 +415,33 @@ const QuizGame = () => {
     [roomCode, isHost]
   );
 
-  const trackHostPresence = useCallback((presences: any[]) => {
-    const hostPresent = presences.some(p => p.isHost);
-    if (hostPresent) {
-      lastHostSeenRef.current = Date.now();
-      
-      if (hostCheckTimeoutRef.current) {
-        clearTimeout(hostCheckTimeoutRef.current);
-        hostCheckTimeoutRef.current = null;
-      }
-    } else if (!isHost) {
-      const timeSinceLastHostSeen = Date.now() - lastHostSeenRef.current;
-      
-      if (timeSinceLastHostSeen > 3000) { 
-        if (!hostCheckTimeoutRef.current) {
-          hostCheckTimeoutRef.current = setTimeout(() => {
-            const finalCheck = Date.now() - lastHostSeenRef.current;
-            if (finalCheck > 5000) {
-              setRoomClosed(true);
-            }
-          }, 2000);
+  const trackHostPresence = useCallback(
+    (presences: any[]) => {
+      const hostPresent = presences.some((p) => p.isHost);
+      if (hostPresent) {
+        lastHostSeenRef.current = Date.now();
+
+        if (hostCheckTimeoutRef.current) {
+          clearTimeout(hostCheckTimeoutRef.current);
+          hostCheckTimeoutRef.current = null;
+        }
+      } else if (!isHost) {
+        const timeSinceLastHostSeen = Date.now() - lastHostSeenRef.current;
+
+        if (timeSinceLastHostSeen > 3000) {
+          if (!hostCheckTimeoutRef.current) {
+            hostCheckTimeoutRef.current = setTimeout(() => {
+              const finalCheck = Date.now() - lastHostSeenRef.current;
+              if (finalCheck > 5000) {
+                setRoomClosed(true);
+              }
+            }, 2000);
+          }
         }
       }
-    }
-  }, [isHost]);
+    },
+    [isHost]
+  );
 
   const setupRealtimeSubscriptions = useCallback(async () => {
     if (!roomCode || !playerData?.player?.id) return;
@@ -441,12 +450,12 @@ const QuizGame = () => {
     const channel = supabase.channel(`room:${roomCode}`);
 
     let updateTimeout: NodeJS.Timeout | null = null;
-    
+
     const updatePlayers = () => {
       if (updateTimeout) {
         clearTimeout(updateTimeout);
       }
-      
+
       updateTimeout = setTimeout(() => {
         const state = channel.presenceState();
         const playerMap = new Map<number, Player>();
@@ -479,11 +488,12 @@ const QuizGame = () => {
     channel
       .on("presence", { event: "sync" }, updatePlayers)
       .on("presence", { event: "join" }, ({ newPresences }) => {
-        const { presence_ref, ...newPlayer } = newPresences[0] as PlayerPresence;
+        const { presence_ref, ...newPlayer } =
+          newPresences[0] as PlayerPresence;
 
         trackHostPresence([newPlayer]);
 
-        updatePlayersWithOptimization(prev => {
+        updatePlayersWithOptimization((prev) => {
           if (prev.some((p) => p.id === newPlayer.id)) return prev;
 
           const savedPlayerData = savedScores[newPlayer.id];
@@ -499,19 +509,20 @@ const QuizGame = () => {
         });
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
-        const { presence_ref, ...leftPlayer } = leftPresences[0] as PlayerPresence;
+        const { presence_ref, ...leftPlayer } =
+          leftPresences[0] as PlayerPresence;
 
-        updatePlayersWithOptimization(prev => 
+        updatePlayersWithOptimization((prev) =>
           prev.filter((p) => p.id !== leftPlayer.id)
         );
 
         if (leftPlayer.isHost && !isHost) {
           setTimeout(() => {
             const currentState = channel.presenceState();
-            const hostStillPresent = Object.values(currentState).some((presences: any) => 
-              presences.some((p: any) => p.isHost)
+            const hostStillPresent = Object.values(currentState).some(
+              (presences: any) => presences.some((p: any) => p.isHost)
             );
-            
+
             if (!hostStillPresent) {
               setRoomClosed(true);
             }
@@ -544,14 +555,16 @@ const QuizGame = () => {
       })
       .on("broadcast", { event: "player_answer" }, ({ payload }) => {
         if (payload.roomCode === roomCode) {
-          updatePlayersWithOptimization(prev => 
+          updatePlayersWithOptimization((prev) =>
             prev.map((player) =>
               player.id === payload.playerId
                 ? {
                     ...player,
                     hasAnswered: true,
                     selectedAnswer: payload.selectedAnswer,
-                    score: payload.scoreChange ? player.score + payload.scoreChange : player.score,
+                    score: payload.scoreChange
+                      ? player.score + payload.scoreChange
+                      : player.score,
                   }
                 : player
             )
@@ -630,7 +643,7 @@ const QuizGame = () => {
       if (!channelRef.current) return;
 
       try {
-        updatePlayersWithOptimization(prev =>
+        updatePlayersWithOptimization((prev) =>
           prev.map((player) =>
             player.id === playerId
               ? { ...player, score: player.score + scoreChange }
@@ -679,144 +692,181 @@ const QuizGame = () => {
 
   const applyCardEffect = useCallback(
     (card: Card, cardData: Card) => {
-      const effectId = `effect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const effect = cardData.effect;
+      const effectId = `effect-${Date.now()}-${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+      const { effect } = cardData;
       const currentTime = Date.now();
-      switch (effect.type) {
-        case "time":
-          const timeEffect: ActiveCardEffect = {
+
+      // --- TIME EFFECT ---
+      const handleTimeEffect = () => {
+        const timeEffect: ActiveCardEffect = {
+          id: effectId,
+          type: "time",
+          effect,
+          startTime: currentTime,
+          targetPlayer: 1,
+          // Thêm flag để biết effect chỉ kéo dài đến hết câu hỏi
+          expiresAtQuestionEnd: true,
+        };
+        setActiveEffects((prev) => [...prev, timeEffect]);
+
+        setTimeLeft((prev) => {
+          let newTime = prev;
+
+          if (typeof effect.value === "string" && effect.value.includes("%")) {
+            const percent = parseInt(effect.value.replace("%", ""), 10);
+            newTime = Math.max(1, prev + Math.floor((prev * percent) / 100));
+          } else if (typeof effect.value === "number") {
+            newTime = Math.max(1, prev + effect.value);
+          }
+
+          if (isHost) broadcastTimeUpdate(newTime);
+          return newTime;
+        });
+      };
+
+      // --- CSS EFFECT ---
+      const handleCssEffect = () => {
+        const cssEffect: ActiveCardEffect = {
+          id: effectId,
+          type: "css",
+          effect,
+          // Thời gian hiệu ứng chỉ đến khi hết câu hỏi
+          duration: Math.max(1000, timeLeft * 1000), // Đảm bảo ít nhất 1 giây
+          startTime: currentTime,
+          targetPlayer: effect.value < 0 ? 2 : 1,
+          expiresAtQuestionEnd: true,
+        };
+
+        setActiveEffects((prev) => [...prev, cssEffect]);
+        setGameModifiers((prev) => ({
+          ...prev,
+          cssEffects: [...prev.cssEffects, effect.effect],
+        }));
+
+        const cssTimeout = setTimeout(() => {
+          setActiveEffects((prev) => prev.filter((e) => e.id !== effectId));
+          setGameModifiers((prev) => ({
+            ...prev,
+            cssEffects: prev.cssEffects.filter((css) => css !== effect.effect),
+          }));
+        }, Math.max(1000, timeLeft * 1000));
+
+        effectCleanupRef.current.push(cssTimeout);
+      };
+
+      // --- SCORE EFFECT ---
+      const handleScoreEffect = () => {
+        if (effect.value < 0) {
+          // Steal points
+          updatePlayersWithOptimization((prev) =>
+            prev.map((player) => {
+              if (player.id === currentPlayerId) {
+                return {
+                  ...player,
+                  score: player.score + Math.abs(effect.value),
+                };
+              } else {
+                return {
+                  ...player,
+                  score: Math.max(0, player.score + effect.value),
+                };
+              }
+            })
+          );
+
+          setScoreUpdates((prev) => [
+            ...prev,
+            {
+              playerId: currentPlayerId!,
+              points: Math.abs(effect.value),
+              animationId: `steal-gain-${effectId}`,
+            },
+          ]);
+        } else if (effect.value > 1) {
+          // Multiplier - chỉ áp dụng đến hết câu hỏi hiện tại
+          const scoreEffect: ActiveCardEffect = {
             id: effectId,
-            type: "time",
+            type: "score",
             effect,
             startTime: currentTime,
             targetPlayer: 1,
+            expiresAtQuestionEnd: true,
           };
-
-          setActiveEffects((prev) => [...prev, timeEffect]);
-          setTimeLeft((prev) => {
-            const newTime = Math.max(1, prev + effect.value);
-            if (isHost) {
-              broadcastTimeUpdate(newTime);
-            }
-            return newTime;
-          });
-          break;
-
-        case "css":
-          const cssEffect: ActiveCardEffect = {
-            id: effectId,
-            type: "css",
-            effect,
-            duration: 5000,
-            startTime: currentTime,
-            targetPlayer: effect.value < 0 ? 2 : 1,
-          };
-
-          setActiveEffects((prev) => [...prev, cssEffect]);
+          setActiveEffects((prev) => [...prev, scoreEffect]);
           setGameModifiers((prev) => ({
             ...prev,
-            cssEffects: [...prev.cssEffects, effect.effect],
+            scoreMultiplier: effect.value,
           }));
+        } else {
+          // Normal bonus
+          updatePlayersWithOptimization((prev) =>
+            prev.map((player) =>
+              player.id === currentPlayerId
+                ? { ...player, score: player.score + effect.value }
+                : player
+            )
+          );
+        }
+      };
 
-          const cssTimeout = setTimeout(() => {
-            setActiveEffects((prev) => prev.filter((e) => e.id !== effectId));
-            setGameModifiers((prev) => ({
-              ...prev,
-              cssEffects: prev.cssEffects.filter(
-                (css) => css !== effect.effect
-              ),
-            }));
-          }, 5000);
+      // --- ANSWER EFFECT ---
+      const handleAnswerEffect = () => {
+        if (!currentQuestion) return;
 
-          effectCleanupRef.current.push(cssTimeout);
+        const answerEffect: ActiveCardEffect = {
+          id: effectId,
+          type: "answer",
+          effect,
+          startTime: currentTime,
+          targetPlayer: effect.mode === "remove" ? 1 : 2,
+          expiresAtQuestionEnd: true,
+        };
+
+        setActiveEffects((prev) => [...prev, answerEffect]);
+
+        if (effect.mode === "remove") {
+          const wrongAnswers = currentQuestion.options
+            .map((_, index) => index)
+            .filter((i) => i !== currentQuestion.correctAnswer);
+          const answersToRemove = wrongAnswers.slice(0, effect.count || 1);
+
+          setGameModifiers((prev) => ({
+            ...prev,
+            removedAnswers: [...prev.removedAnswers, ...answersToRemove],
+          }));
+        }
+
+        if (effect.mode === "lock") {
+          const availableAnswers = currentQuestion.options
+            .map((_, index) => index)
+            .filter((i) => !gameModifiers.lockedAnswers.includes(i));
+          const answersToLock = availableAnswers
+            .sort(() => Math.random() - 0.5)
+            .slice(0, effect.count || 1);
+
+          setGameModifiers((prev) => ({
+            ...prev,
+            lockedAnswers: [...prev.lockedAnswers, ...answersToLock],
+          }));
+        }
+      };
+
+      // --- DISPATCH ---
+      switch (effect.type) {
+        case "time":
+          handleTimeEffect();
           break;
-
+        case "css":
+          handleCssEffect();
+          break;
         case "score":
-          if (effect.value === -50) {
-            updatePlayersWithOptimization(prev => {
-              return prev.map((player) => {
-                if (player.id === currentPlayerId) {
-                  return { ...player, score: Math.max(0, player.score + 50) };
-                } else if (player.id !== currentPlayerId) {
-                  return { ...player, score: Math.max(0, player.score - 50) };
-                }
-                return player;
-              });
-            });
-
-            setScoreUpdates((prev) => [
-              ...prev,
-              {
-                playerId: currentPlayerId!,
-                points: 50,
-                animationId: `steal-gain-${effectId}`,
-              },
-            ]);
-          } else {
-            const scoreEffect: ActiveCardEffect = {
-              id: effectId,
-              type: "score",
-              effect,
-              startTime: currentTime,
-              targetPlayer: 1,
-            };
-
-            setActiveEffects((prev) => [...prev, scoreEffect]);
-            setGameModifiers((prev) => ({
-              ...prev,
-              scoreMultiplier: effect.value,
-            }));
-          }
+          handleScoreEffect();
           break;
-
         case "answer":
-          if (!currentQuestion) break;
-
-          const answerEffect: ActiveCardEffect = {
-            id: effectId,
-            type: "answer",
-            effect,
-            startTime: currentTime,
-            targetPlayer: effect.mode === "remove" ? 1 : 2,
-          };
-
-          setActiveEffects((prev) => [...prev, answerEffect]);
-
-          if (effect.mode === "remove") {
-            const wrongAnswers = currentQuestion.options
-              .map((_, index) => index)
-              .filter((index) => index !== currentQuestion.correctAnswer);
-
-            const answersToRemove = wrongAnswers.slice(0, effect.count || 1);
-            setGameModifiers((prev) => ({
-              ...prev,
-              removedAnswers: [...prev.removedAnswers, ...answersToRemove],
-            }));
-          } else if (effect.mode === "fake") {
-            const fakeAnswers = Array(effect.count || 1)
-              .fill(0)
-              .map((_, i) => `Đáp án giả ${i + 1}`);
-
-            setGameModifiers((prev) => ({
-              ...prev,
-              fakeAnswers: [...prev.fakeAnswers, ...fakeAnswers],
-            }));
-          } else if (effect.mode === "lock") {
-            const availableAnswers = currentQuestion.options
-              .map((_, index) => index)
-              .filter((index) => !gameModifiers.lockedAnswers.includes(index));
-
-            const answersToLock = availableAnswers
-              .sort(() => Math.random() - 0.5)
-              .slice(0, effect.count || 1);
-
-            setGameModifiers((prev) => ({
-              ...prev,
-              lockedAnswers: [...prev.lockedAnswers, ...answersToLock],
-            }));
-          }
+          handleAnswerEffect();
           break;
-
         default:
           console.warn(`Unknown effect type: ${effect.type}`);
       }
@@ -828,24 +878,38 @@ const QuizGame = () => {
       isHost,
       broadcastTimeUpdate,
       updatePlayersWithOptimization,
+      timeLeft, // Thêm timeLeft để tính thời gian hiệu ứng
     ]
   );
+
+  // Thêm useRef để theo dõi activeEffects mà không gây re-render
+  const activeEffectsRef = useRef<ActiveCardEffect[]>([]);
+  activeEffectsRef.current = activeEffects;
 
   const clearQuestionEffects = useCallback(() => {
     effectCleanupRef.current.forEach((timeout) => clearTimeout(timeout));
     effectCleanupRef.current = [];
 
-    setActiveEffects([]);
-    setGameModifiers({
+    // Chỉ xóa các effect có expiresAtQuestionEnd = true
+    setActiveEffects((prev) =>
+      prev.filter((effect) => !effect.expiresAtQuestionEnd)
+    );
+
+    // Sử dụng activeEffectsRef.current thay vì activeEffects từ closure
+    setGameModifiers((prev) => ({
       timeModifier: 0,
-      cssEffects: [],
+      cssEffects: prev.cssEffects.filter(
+        (css) =>
+          !activeEffectsRef.current.some(
+            (effect) => effect.type === "css" && effect.expiresAtQuestionEnd
+          )
+      ),
       scoreMultiplier: 1,
       removedAnswers: [],
-      fakeAnswers: [],
+      fakeAnswers: prev.fakeAnswers,
       lockedAnswers: [],
-    });
-  }, []);
-
+    }));
+  }, []); // Loại bỏ dependency activeEffects
   const goToNextQuestion = useCallback(() => {
     if (gameOver || currentQuestionIndex + 1 >= maxQuestions) {
       setGameOver(true);
@@ -863,7 +927,7 @@ const QuizGame = () => {
     setRoundScore(0);
     setAllPlayersAnswered(false);
 
-    updatePlayersWithOptimization(prev => 
+    updatePlayersWithOptimization((prev) =>
       prev.map((player) => ({
         ...player,
         hasAnswered: false,
@@ -901,7 +965,7 @@ const QuizGame = () => {
       setIsAnswered(true);
       setShowCorrectAnswer(true);
 
-      updatePlayersWithOptimization(prev => 
+      updatePlayersWithOptimization((prev) =>
         prev.map((player) =>
           player.id === currentPlayerId
             ? { ...player, hasAnswered: true, selectedAnswer: optionIndex }
@@ -932,27 +996,32 @@ const QuizGame = () => {
         updatePlayerScore(currentPlayerId, earnedScore);
 
         if (config?.selectedGameMode && config.selectedGameMode.id === 1) {
-          const randomCard: Card = {
-            ...allCards[Math.floor(Math.random() * allCards.length)],
-            uniqueId: `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          };
+          // Chỉ random từ các thẻ được phép sử dụng trong setting
+          if (allowedCards.length > 0) {
+            const randomCard: Card = {
+              ...allowedCards[Math.floor(Math.random() * allowedCards.length)],
+              uniqueId: `card-${Date.now()}-${Math.random()
+                .toString(36)
+                .substr(2, 9)}`,
+            };
 
-          setDrawnCard(randomCard);
-          setIsDrawingCard(true);
+            setDrawnCard(randomCard);
+            setIsDrawingCard(true);
 
-          setTimeout(() => {
-            setCurrentPlayerHand((prev) => [...prev, randomCard]);
-            setIsDrawingCard(false);
-            setDrawnCard(null);
-            
-            updatePlayersWithOptimization(prev =>
-              prev.map((player) =>
-                player.id === currentPlayerId
-                  ? { ...player, cards: player.cards + 1 }
-                  : player
-              )
-            );
-          }, 1500);
+            setTimeout(() => {
+              setCurrentPlayerHand((prev) => [...prev, randomCard]);
+              setIsDrawingCard(false);
+              setDrawnCard(null);
+
+              updatePlayersWithOptimization((prev) =>
+                prev.map((player) =>
+                  player.id === currentPlayerId
+                    ? { ...player, cards: player.cards + 1 }
+                    : player
+                )
+              );
+            }, 1500);
+          }
         }
       }
     },
@@ -961,7 +1030,7 @@ const QuizGame = () => {
       currentQuestion,
       gameOver,
       gameModifiers.scoreMultiplier,
-      allCards,
+      allowedCards, // Sử dụng allowedCards thay vì allCards
       currentPlayerId,
       updatePlayerScore,
       roomCode,
@@ -970,14 +1039,14 @@ const QuizGame = () => {
     ]
   );
 
-  const handleTimeoutForUnansweredPlayers = useCallback(() => {    
-    updatePlayersWithOptimization(prev => 
+  const handleTimeoutForUnansweredPlayers = useCallback(() => {
+    updatePlayersWithOptimization((prev) =>
       prev.map((player) => {
         if (!player.hasAnswered) {
-          return { 
-            ...player, 
-            hasAnswered: true, 
-            selectedAnswer: -1
+          return {
+            ...player,
+            hasAnswered: true,
+            selectedAnswer: -1,
           };
         }
         return player;
@@ -999,7 +1068,13 @@ const QuizGame = () => {
       setSelectedAnswer(-1);
       setShowCorrectAnswer(true);
     }
-  }, [updatePlayersWithOptimization, roomCode, isHost, isAnswered, currentPlayerId]);
+  }, [
+    updatePlayersWithOptimization,
+    roomCode,
+    isHost,
+    isAnswered,
+    currentPlayerId,
+  ]);
 
   const togglePause = useCallback(async () => {
     if (gameOver) return;
@@ -1041,7 +1116,9 @@ const QuizGame = () => {
         return;
       }
 
-      const animationId = `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const animationId = `card-${Date.now()}-${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
 
       applyCardEffect(card, cardData);
 
@@ -1060,7 +1137,7 @@ const QuizGame = () => {
         prev.filter((c) => c.uniqueId !== card.uniqueId)
       );
 
-      updatePlayersWithOptimization(prev =>
+      updatePlayersWithOptimization((prev) =>
         prev.map((player) =>
           player.id === currentPlayerId
             ? { ...player, cards: player.cards - 1 }
@@ -1086,7 +1163,7 @@ const QuizGame = () => {
     ]
   );
 
-  const goHome = useCallback(() => router.push("/"), [router]);
+  const goHome = useCallback(() => router.push(`/lobby/${roomCode}`), [router]);
 
   const restartGame = useCallback(async () => {
     if (!isHost) return;
@@ -1101,7 +1178,7 @@ const QuizGame = () => {
     clearQuestionEffects();
 
     const initialTime = config?.gameSettings.timePerQuestion || 30;
-    
+
     setCurrentQuestionIndex(0);
     setTimeLeft(initialTime);
     setSelectedAnswer(null);
@@ -1118,7 +1195,7 @@ const QuizGame = () => {
     setGameOver(false);
     setAllPlayersAnswered(false);
 
-    updatePlayersWithOptimization(prev =>
+    updatePlayersWithOptimization((prev) =>
       prev.map((player) => ({
         ...player,
         score: 0,
@@ -1167,9 +1244,9 @@ const QuizGame = () => {
 
   const getCardInfo = useCallback(
     (name: string) => {
-      return allCards.find((card) => card.name === name);
+      return allowedCards.find((card) => card.name === name);
     },
-    [allCards]
+    [allowedCards]
   );
 
   const showCardInfo = useCallback((cardTitle: string, description: string) => {
@@ -1237,10 +1314,23 @@ const QuizGame = () => {
     updateGameState,
   ]);
 
+  // Xóa effect khi hiện kết quả hoặc hiện cập nhật điểm số
   useEffect(() => {
-    clearQuestionEffects();
-  }, [currentQuestionIndex, clearQuestionEffects]);
-
+    if (showCorrectAnswer || showLeaderboardAfterAnswer) {
+      // Chỉ clear effects nếu thực sự cần
+      const shouldClearEffects = activeEffects.some(
+        (effect) => effect.expiresAtQuestionEnd
+      );
+      if (shouldClearEffects) {
+        clearQuestionEffects();
+      }
+    }
+  }, [
+    showCorrectAnswer,
+    showLeaderboardAfterAnswer,
+    activeEffects,
+    clearQuestionEffects,
+  ]);
   useEffect(() => {
     let emergencyTimeout: NodeJS.Timeout | null = null;
 
@@ -1363,10 +1453,12 @@ const QuizGame = () => {
     if (scoreUpdates.length === 0) return;
 
     const updateTimeout = setTimeout(() => {
-      updatePlayersWithOptimization(prev => {
+      updatePlayersWithOptimization((prev) => {
         return prev.map((player) => {
-          const playerUpdate = scoreUpdates.find(update => update.playerId === player.id);
-          return playerUpdate 
+          const playerUpdate = scoreUpdates.find(
+            (update) => update.playerId === player.id
+          );
+          return playerUpdate
             ? { ...player, score: player.score + playerUpdate.points }
             : player;
         });
@@ -1437,7 +1529,11 @@ const QuizGame = () => {
 
   if (gameOver) {
     return (
-      <GameOver players={sortedPlayers} onGoHome={goHome} onRestart={restartGame} />
+      <GameOver
+        players={sortedPlayers}
+        onGoHome={goHome}
+        onRestart={restartGame}
+      />
     );
   }
 
@@ -1520,26 +1616,36 @@ const QuizGame = () => {
                 showLeaderboardAfterAnswer || (timeLeft === 0 && isAnswered)
               }
             />
-
-            <QuestionCard
-              showLeaderboardAfterAnswer={showLeaderboardAfterAnswer}
-              timeLeft={timeLeft}
-              currentQuestion={modifiedQuestion}
-              isAnswered={isAnswered}
-              showCorrectAnswer={showCorrectAnswer}
-              selectedAnswer={selectedAnswer}
-              config={config}
-              handleAnswerSelect={handleAnswerSelect}
-              players={sortedPlayers}
-              scoreUpdates={scoreUpdates}
-              gameModifiers={gameModifiers}
-              allPlayersAnswered={allPlayersAnswered}
-            />
-
-            <CardLog
+            <div
+              className={`
+                  w-full lg:w-2/4 
+                  rounded-3xl border border-white/10 
+                  bg-gradient-to-b from-white/10 to-white/5 
+                  p-6 shadow-2xl shadow-black/40 backdrop-blur-md overflow-auto
+                  ${gameModifiers.cssEffects.join(" ")} 
+                `}
+            >
+              <QuestionCard
+                showLeaderboardAfterAnswer={showLeaderboardAfterAnswer}
+                timeLeft={timeLeft}
+                currentQuestion={modifiedQuestion}
+                isAnswered={isAnswered}
+                showCorrectAnswer={showCorrectAnswer}
+                selectedAnswer={selectedAnswer}
+                config={config}
+                handleAnswerSelect={handleAnswerSelect}
+                players={sortedPlayers}
+                scoreUpdates={scoreUpdates}
+                gameModifiers={gameModifiers}
+                allPlayersAnswered={allPlayersAnswered}
+              />
+            </div>
+            <CardLogAndChat
               usedCardsLog={usedCardsLog}
               getCardInfo={getCardInfo}
               showCardInfo={showCardInfo}
+              roomCode={roomCode}
+              playerData={playerData}
             />
           </motion.div>
         </div>

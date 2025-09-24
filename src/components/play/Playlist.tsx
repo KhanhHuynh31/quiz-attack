@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaCrown, FaCheck } from "react-icons/fa";
 import { Player, ScoreUpdate } from "@/types/type";
@@ -25,28 +25,10 @@ const PlayerList: React.FC<PlayerListProps> = ({
   // Helper function to get avatar content
   const getAvatarContent = (player: Player) => {
     try {
-      if (player.avatar?.startsWith("http")) {
-        return (
-          <img
-            src={player.avatar}
-            alt="User avatar"
-            className="w-full h-full object-cover rounded-full"
-          />
-        );
-      }
-
       if (player.avatar?.startsWith("{")) {
         const config = JSON.parse(player.avatar) as AvatarFullConfig;
         return <Avatar className="w-full h-full" {...config} />;
       }
-
-      if (player.avatar) {
-        const config = genConfig(player.avatar);
-        return <Avatar className="w-full h-full" {...config} />;
-      }
-
-      const config = genConfig();
-      return <Avatar className="w-full h-full" {...config} />;
     } catch (error) {
       console.error("Error parsing avatar:", error);
       const config = genConfig();
@@ -107,19 +89,37 @@ const PlayerList: React.FC<PlayerListProps> = ({
 
               {/* Score and cards */}
               <div className="flex items-center space-x-3 ml-2">
-                <div className="flex flex-col items-end">
+                <div
+                  className={`flex flex-col ${
+                    player.cards > 0 ? "items-end" : "items-center"
+                  }`}
+                >
+                  {/* Điểm */}
                   <div className="flex items-center space-x-1">
                     <span className="text-white text-xs">Điểm:</span>
                     <span className="text-yellow-400 font-bold text-sm">
                       {player.score}
                     </span>
                   </div>
-                  <div className="flex items-center space-x-1">
-                    <span className="text-white text-xs">Thẻ:</span>
-                    <span className="text-blue-300 font-bold text-sm">
-                      {player.cards}
-                    </span>
-                  </div>
+
+                  {/* Thẻ (có animation khi xuất hiện) */}
+                  <AnimatePresence>
+                    {player.cards > 0 && (
+                      <motion.div
+                        className="flex items-center space-x-1"
+                        key="cards"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <span className="text-white text-xs">Thẻ:</span>
+                        <span className="text-blue-300 font-bold text-sm">
+                          {player.cards}
+                        </span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
 

@@ -595,17 +595,21 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     if (!canStartGame) return;
 
     try {
-      // 1. Save room data to database first
-      await saveRoomData(gameSettings, selectedGameMode);
-
-      // 2. Update room status to "playing" in database
+      // 1. Reset game state và cập nhật room status trong database
       await supabase
         .from("room")
         .update({
-          status: "playing",
-          game_started_at: new Date().toISOString(),
+          room_status: 1, // Thêm trường room_status
+          current_question_index: null,
+          current_time_left: null,
+          is_paused: null,
+          game_over: null,
+          updated_at: new Date().toISOString(),
         })
         .eq("room_code", roomCode);
+
+      // 2. Save room data to database (sau khi đã reset state)
+      await saveRoomData(gameSettings, selectedGameMode);
 
       // 3. Wait a bit to ensure database is updated
       await new Promise((resolve) => setTimeout(resolve, 500));
