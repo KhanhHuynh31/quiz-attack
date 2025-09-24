@@ -65,7 +65,7 @@ export const powerCards: Card[] = [
     description: "Điểm câu hỏi này x2",
     emoji: "✨",
     color: "from-yellow-400 to-orange-500",
-    effect: { type: "score", value: 200 },
+    effect: { type: "score", value: 2 },
   },
 
   // --- Answer manipulation ---
