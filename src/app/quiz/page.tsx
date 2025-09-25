@@ -22,6 +22,15 @@ import {
 } from "react-icons/fi";
 import toast, { Toaster } from "react-hot-toast";
 import { supabase } from "@/lib/supabaseClient";
+import { Header } from "@/components/home/Header";
+import { useI18n } from "@/hooks/useI18n";
+import AuthModal from "@/components/users/AuthModal";
+import { loadFromLocalStorage, saveToLocalStorage } from "@/hooks/useLocalStorage";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import Background from "@/components/Background";
+import { FaHome } from "react-icons/fa";
+import { LanguageSelector } from "@/components/Selector/LanguageSelector";
 
 interface QuizPack {
   id: number;
@@ -30,6 +39,7 @@ interface QuizPack {
   question_count: number;
   category: string;
   author: string;
+  id_author?: string;
 }
 
 interface QuizQuestion {
@@ -49,9 +59,24 @@ interface FormData {
   author: string;
 }
 
-type AuthorFilter = "all" | "official" | "community";
+type AuthorFilter = "all" | "official" | "community" | "liked";
+
+interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  avatar: string;
+  avatarConfig?: any;
+  auth?: boolean;
+}
+
+const LOCAL_STORAGE_KEYS = {
+  LIKED_PACKS: "liked_quiz_packs",
+};
 
 const QuizPacksCRUD: React.FC = () => {
+  const { t } = useI18n();
+  const router = useRouter();
   const [quizPacks, setQuizPacks] = useState<QuizPack[]>([]);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -64,7 +89,9 @@ const QuizPacksCRUD: React.FC = () => {
   const [likedPacks, setLikedPacks] = useState<Set<number>>(new Set());
   const [categoryInput, setCategoryInput] = useState<string>("");
   const [showCategoryInput, setShowCategoryInput] = useState<boolean>(false);
-  const [editingQuestion, setEditingQuestion] = useState<QuizQuestion | null>(null);
+  const [editingQuestion, setEditingQuestion] = useState<QuizQuestion | null>(
+    null
+  );
   const [showQuestionForm, setShowQuestionForm] = useState<boolean>(false);
 
   const [formData, setFormData] = useState<FormData>({
@@ -81,6 +108,11 @@ const QuizPacksCRUD: React.FC = () => {
     explanation: "",
     image_url: "",
   });
+
+  // Authentication state
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   // Lấy danh mục từ database
   const categories = [...new Set(quizPacks.map((pack) => pack.category))];
@@ -124,6 +156,99 @@ const QuizPacksCRUD: React.FC = () => {
       },
     },
   };
+
+  // Check if user is admin
+  const isAdmin = authUser?.auth === true;
+
+  // Load liked packs from localStorage
+useEffect(() => {
+  const savedLikesArray = loadFromLocalStorage<number[]>(LOCAL_STORAGE_KEYS.LIKED_PACKS, []);
+  setLikedPacks(new Set(Array.isArray(savedLikesArray) ? savedLikesArray : []));
+}, []);
+
+  // Save liked packs to localStorage
+  const saveLikedPacks = (newLiked: Set<number>) => {
+    setLikedPacks(newLiked);
+    saveToLocalStorage(LOCAL_STORAGE_KEYS.LIKED_PACKS, Array.from(newLiked));
+  };
+
+  // Authentication effect
+  useEffect(() => {
+    let subscriptionCleanup: (() => void) | null = null;
+
+    const checkAuthStatus = async () => {
+      setIsCheckingAuth(true);
+
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", session.user.id)
+            .single();
+
+          if (profileData) {
+            setAuthUser(profileData as AuthUser);
+          } else {
+            await supabase.auth.signOut();
+            setAuthUser(null);
+          }
+        }
+      } catch (error) {
+        console.error("Error checking auth status:", error);
+      } finally {
+        setIsCheckingAuth(false);
+      }
+
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === "SIGNED_OUT" || !session) {
+          setAuthUser(null);
+        } else if (event === "SIGNED_IN" && session?.user) {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", session.user.id)
+            .single();
+
+          if (profileData) {
+            setAuthUser(profileData as AuthUser);
+          } else {
+            await supabase.auth.signOut();
+            setAuthUser(null);
+          }
+        }
+      });
+
+      subscriptionCleanup = () => subscription.unsubscribe();
+    };
+
+    checkAuthStatus();
+
+    return () => subscriptionCleanup?.();
+  }, []);
+
+  const handleAuthSuccess = (user: AuthUser) => {
+    setAuthUser(user);
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      setAuthUser(null);
+    } catch (error) {
+      console.error("Error signing out:", error);
+      setAuthUser(null);
+    }
+  };
+
+  const openAuthModal = () => setIsAuthModalOpen(true);
+  const closeAuthModal = () => setIsAuthModalOpen(false);
 
   // Count questions for a quiz pack
   const countQuestions = async (packId: number): Promise<number> => {
@@ -206,17 +331,29 @@ const QuizPacksCRUD: React.FC = () => {
 
   // Create or update quiz pack
   const saveQuizPack = async (): Promise<void> => {
+    if (!authUser) {
+      toast.error("Vui lòng đăng nhập để tạo quiz pack");
+      openAuthModal();
+      return;
+    }
+
     try {
       const packData = {
         name: formData.name,
         description: formData.description,
-        question_count: 0, // Will be updated automatically
+        question_count: 0,
         category: formData.category,
-        author: formData.author || "community", // Default to community
+        author: isAdmin ? "official" : "community",
+        id_author: authUser.id,
       };
 
       let result;
       if (editingPack) {
+        // For editing, only update if admin or own pack
+        if (!isAdmin && editingPack.id_author !== authUser.id) {
+          toast.error("Bạn không có quyền chỉnh sửa quiz pack này");
+          return;
+        }
         result = await supabase
           .from("quiz_packs")
           .update(packData)
@@ -239,9 +376,9 @@ const QuizPacksCRUD: React.FC = () => {
   };
 
   // Delete quiz pack
-  const deleteQuizPack = async (id: number, author: string): Promise<void> => {
-    if (author === "official") {
-      toast.error("Không thể xóa quiz pack chính thức");
+  const deleteQuizPack = async (id: number, author: string, id_author?: string): Promise<void> => {
+    if (!isAdmin && id_author !== authUser?.id) {
+      toast.error("Bạn không có quyền xóa quiz pack này");
       return;
     }
 
@@ -251,10 +388,7 @@ const QuizPacksCRUD: React.FC = () => {
 
     try {
       // First delete all questions in the pack
-      await supabase
-        .from("quiz_questions")
-        .delete()
-        .eq("quiz_pack_id", id);
+      await supabase.from("quiz_questions").delete().eq("quiz_pack_id", id);
 
       // Then delete the pack
       const { error } = await supabase.from("quiz_packs").delete().eq("id", id);
@@ -275,7 +409,7 @@ const QuizPacksCRUD: React.FC = () => {
       name: "",
       description: "",
       category: "",
-      author: "",
+      author: authUser?.name || "",
     });
     setCategoryInput("");
     setShowCategoryInput(false);
@@ -285,8 +419,8 @@ const QuizPacksCRUD: React.FC = () => {
 
   // Open form for editing
   const openEditForm = (pack: QuizPack): void => {
-    if (pack.author === "official") {
-      toast.error("Không thể chỉnh sửa quiz pack chính thức");
+    if (!isAdmin && pack.id_author !== authUser?.id) {
+      toast.error("Bạn không có quyền chỉnh sửa quiz pack này");
       return;
     }
     setEditingPack(pack);
@@ -321,7 +455,7 @@ const QuizPacksCRUD: React.FC = () => {
     } else {
       newLiked.add(packId);
     }
-    setLikedPacks(newLiked);
+    saveLikedPacks(newLiked);
   };
 
   // Handle category selection
@@ -338,7 +472,9 @@ const QuizPacksCRUD: React.FC = () => {
   };
 
   // Handle custom category input
-  const handleCategoryInputChange = (e: ChangeEvent<HTMLInputElement>): void => {
+  const handleCategoryInputChange = (
+    e: ChangeEvent<HTMLInputElement>
+  ): void => {
     const value = e.target.value;
     setCategoryInput(value);
     setFormData({ ...formData, category: value });
@@ -363,7 +499,9 @@ const QuizPacksCRUD: React.FC = () => {
   };
 
   // Handle question input change
-  const handleQuestionInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): void => {
+  const handleQuestionInputChange = (
+    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ): void => {
     const { name, value } = e.target;
     setQuestionFormData({ ...questionFormData, [name]: value });
   };
@@ -401,7 +539,9 @@ const QuizPacksCRUD: React.FC = () => {
 
       if (result.error) throw result.error;
 
-      toast.success(editingQuestion ? "Đã cập nhật câu hỏi!" : "Đã thêm câu hỏi mới!");
+      toast.success(
+        editingQuestion ? "Đã cập nhật câu hỏi!" : "Đã thêm câu hỏi mới!"
+      );
       resetQuestionForm();
       fetchQuestions(viewingQuestions);
       updateQuestionCount(viewingQuestions);
@@ -459,19 +599,23 @@ const QuizPacksCRUD: React.FC = () => {
       pack.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       pack.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       pack.author.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesCategory =
       selectedCategory === "all" || pack.category === selectedCategory;
-    
-    const matchesAuthor =
-      selectedAuthor === "all" ||
-      (selectedAuthor === "official" && pack.author === "official") ||
-      (selectedAuthor === "community" && pack.author !== "official");
+
+    let matchesAuthor = true;
+    if (selectedAuthor === "official") {
+      matchesAuthor = pack.author === "official";
+    } else if (selectedAuthor === "community") {
+      matchesAuthor = pack.author !== "official";
+    } else if (selectedAuthor === "liked") {
+      matchesAuthor = likedPacks.has(pack.id);
+    }
 
     return matchesSearch && matchesCategory && matchesAuthor;
   });
 
-  if (loading) {
+  if (loading || isCheckingAuth) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center">
         <motion.div
@@ -494,12 +638,18 @@ const QuizPacksCRUD: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 relative overflow-hidden">
-      {/* Background Elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-pink-500/20 to-purple-500/20 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-full blur-3xl"></div>
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4">
+        <Header />
       </div>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={closeAuthModal}
+        onAuthSuccess={handleAuthSuccess}
+      />
 
       <div className="relative z-10 p-4 md:p-8">
         <Toaster
@@ -565,7 +715,9 @@ const QuizPacksCRUD: React.FC = () => {
                 <FiUser className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 w-5 h-5" />
                 <select
                   value={selectedAuthor}
-                  onChange={(e) => setSelectedAuthor(e.target.value as AuthorFilter)}
+                  onChange={(e) =>
+                    setSelectedAuthor(e.target.value as AuthorFilter)
+                  }
                   className="pl-12 pr-10 py-4 bg-white/10 border border-white/20 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 appearance-none cursor-pointer min-w-[160px]"
                 >
                   <option value="all" className="bg-gray-800">
@@ -577,11 +729,14 @@ const QuizPacksCRUD: React.FC = () => {
                   <option value="community" className="bg-gray-800">
                     Cộng đồng
                   </option>
+                  <option value="liked" className="bg-gray-800">
+                    Yêu thích
+                  </option>
                 </select>
               </div>
             </div>
 
-            {/* Add Button */}
+            {/* Add Button - Check auth */}
             <motion.button
               whileHover={{
                 scale: 1.05,
@@ -589,6 +744,10 @@ const QuizPacksCRUD: React.FC = () => {
               }}
               whileTap={{ scale: 0.95 }}
               onClick={() => {
+                if (!authUser) {
+                  openAuthModal();
+                  return;
+                }
                 resetForm();
                 setShowCreateForm(true);
               }}
@@ -716,7 +875,7 @@ const QuizPacksCRUD: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Author */}
+                  {/* Author - Readonly if editing, default to user name if creating */}
                   <div>
                     <label className="block text-white/90 font-semibold mb-3">
                       Tác giả
@@ -724,11 +883,9 @@ const QuizPacksCRUD: React.FC = () => {
                     <input
                       type="text"
                       value={formData.author}
-                      onChange={(e) =>
-                        setFormData({ ...formData, author: e.target.value })
-                      }
-                      className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 transition-all duration-300"
-                      placeholder="Tên của bạn (mặc định: community)"
+                      readOnly
+                      className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-2xl text-white cursor-not-allowed opacity-70"
+                      placeholder="Tên của bạn"
                     />
                   </div>
                 </div>
@@ -815,7 +972,9 @@ const QuizPacksCRUD: React.FC = () => {
                       <div className="flex items-center gap-1 text-white/80">
                         <FiUser className="w-4 h-4" />
                         <span className="text-sm">
-                          {pack.author === "official" ? "Chính thức" : pack.author || "Cộng đồng"}
+                          {pack.author === "official"
+                            ? "Chính thức"
+                            : pack.author || "Cộng đồng"}
                         </span>
                       </div>
                       <div className="flex items-center gap-1 text-white/80">
@@ -842,7 +1001,7 @@ const QuizPacksCRUD: React.FC = () => {
                       {viewingQuestions === pack.id ? "Ẩn" : "Xem"}
                     </motion.button>
 
-                    {pack.author !== "official" && (
+                    {(isAdmin || pack.id_author === authUser?.id) && (
                       <>
                         <motion.button
                           whileHover={{ scale: 1.05 }}
@@ -856,7 +1015,7 @@ const QuizPacksCRUD: React.FC = () => {
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          onClick={() => deleteQuizPack(pack.id, pack.author)}
+                          onClick={() => deleteQuizPack(pack.id, pack.author, pack.id_author)}
                           className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-500/20 to-pink-500/20 text-red-300 rounded-xl hover:from-red-500/30 hover:to-pink-500/30 transition-all duration-300 border border-red-500/30"
                         >
                           <FiTrash2 className="w-4 h-4" />
@@ -928,12 +1087,15 @@ const QuizPacksCRUD: React.FC = () => {
                 </motion.button>
               </div>
 
-              {/* Question Form */}
-              {quizPacks.find(p => p.id === viewingQuestions)?.author !== "official" && (
+              {/* Question Form - Only for non-official or admin */}
+              {(quizPacks.find((p) => p.id === viewingQuestions)?.author !==
+                "official" || isAdmin) && (
                 <div className="mb-8 bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-xl font-bold text-white">
-                      {editingQuestion ? "Chỉnh sửa câu hỏi" : "Thêm câu hỏi mới"}
+                      {editingQuestion
+                        ? "Chỉnh sửa câu hỏi"
+                        : "Thêm câu hỏi mới"}
                     </h3>
                     {editingQuestion && (
                       <motion.button
@@ -986,10 +1148,18 @@ const QuizPacksCRUD: React.FC = () => {
                           Các lựa chọn
                         </label>
                         {questionFormData.options.map((option, index) => (
-                          <div key={index} className="flex items-center gap-2 mb-2">
+                          <div
+                            key={index}
+                            className="flex items-center gap-2 mb-2"
+                          >
                             <button
                               type="button"
-                              onClick={() => setQuestionFormData({...questionFormData, correct_answer: index})}
+                              onClick={() =>
+                                setQuestionFormData({
+                                  ...questionFormData,
+                                  correct_answer: index,
+                                })
+                              }
                               className={`w-6 h-6 rounded-full flex items-center justify-center ${
                                 questionFormData.correct_answer === index
                                   ? "bg-green-500"
@@ -1003,7 +1173,9 @@ const QuizPacksCRUD: React.FC = () => {
                             <input
                               type="text"
                               value={option}
-                              onChange={(e) => handleOptionChange(index, e.target.value)}
+                              onChange={(e) =>
+                                handleOptionChange(index, e.target.value)
+                              }
                               className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 transition-all duration-300"
                               placeholder={`Lựa chọn ${index + 1}...`}
                               required
@@ -1110,8 +1282,8 @@ const QuizPacksCRUD: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Question Actions */}
-                        {quizPacks.find(p => p.id === viewingQuestions)?.author !== "official" && (
+                        {/* Question Actions - Only for non-official or admin */}
+                        {(quizPacks.find((p) => p.id === viewingQuestions)?.author !== "official" || isAdmin) && (
                           <div className="flex gap-2">
                             <motion.button
                               whileHover={{ scale: 1.05 }}
