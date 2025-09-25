@@ -23,8 +23,8 @@ interface GameSettingSelectorProps {
   isQuizMode?: boolean;
 }
 
-const TIME_OPTIONS = [10, 15, 20, 30, 45, 60] as const;
-const ROUND_OPTIONS = [5, 10, 15, 20, 25, 30] as const;
+const TIME_OPTIONS = [10, 20, 30, 60, 120, 180] as const;
+const ROUND_OPTIONS = [5, 10, 15, 20] as const;
 const TIME_LIMITS = { min: 5, max: 120 } as const;
 const ROUND_LIMITS = { min: 1, max: 50 } as const;
 

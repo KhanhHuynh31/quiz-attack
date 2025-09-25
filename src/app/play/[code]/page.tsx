@@ -114,7 +114,6 @@ const QuizGame = () => {
     };
   }, [showLeaderboardAfterAnswer, showCorrectAnswer, gameOver]);
 
-  
   const allowedCards = useMemo(() => {
     if (
       !config?.gameSettings.allowedCards ||
@@ -261,7 +260,7 @@ const QuizGame = () => {
   const handleTimeCardEffect = useCallback(
     async (card: Card, effect: any) => {
       if (!isHost) {
-        
+        // Non-host players send request to host
         if (channelRef.current) {
           await channelRef.current.send({
             type: "broadcast",
@@ -277,26 +276,57 @@ const QuizGame = () => {
         return;
       }
 
-      
+      // Host handles the time effect
       let newTime = timeLeft;
 
-      if (typeof effect.value === "string" && effect.value.includes("%")) {
+      // Handle 100% reset case first (highest priority)
+      if (effect.value === "100%") {
+        // Reset to full time from game settings
+        newTime = config?.gameSettings.timePerQuestion || 30;
+      } else if (
+        typeof effect.value === "string" &&
+        effect.value.includes("%")
+      ) {
+        // Handle other percentage cases
         const percent = parseInt(effect.value.replace("%", ""), 10);
         newTime = Math.max(
           1,
           timeLeft + Math.floor((timeLeft * percent) / 100)
         );
       } else if (typeof effect.value === "number") {
+        // Handle fixed number additions/subtractions
         newTime = Math.max(1, timeLeft + effect.value);
-      } else if (effect.value === "100%") {
-        
-        newTime = config?.gameSettings.timePerQuestion || 30;
       }
 
       setTimeLeft(newTime);
-      broadcastTimeUpdate(newTime);
 
-      
+      // Broadcast time update manually since broadcastTimeUpdate isn't available yet
+      if (channelRef.current) {
+        try {
+          await channelRef.current.send({
+            type: "broadcast",
+            event: "timer_update",
+            payload: {
+              roomCode,
+              timeLeft: newTime,
+            },
+          });
+        } catch (error) {
+          console.error("Error broadcasting time update:", error);
+        }
+      }
+
+      // Update database manually since updateGameState isn't available yet
+      try {
+        await supabase
+          .from("room")
+          .update({ current_time_left: newTime })
+          .eq("room_code", roomCode);
+      } catch (error) {
+        console.error("Error updating game state:", error);
+      }
+
+      // Create effect tracking
       const effectId = `time-effect-${Date.now()}`;
       const timeEffect: ActiveCardEffect = {
         id: effectId,
@@ -400,7 +430,7 @@ const QuizGame = () => {
 
       const gameConfig: ExtendedGameConfig = {
         roomCode,
-        players: [], 
+        players: [],
         gameSettings: { ...parsedSettings, selectedQuizPack },
         selectedGameMode,
       };
@@ -582,9 +612,8 @@ const QuizGame = () => {
           }, 3000);
         }
       })
-      
+
       .on("broadcast", { event: "css_card_request" }, async ({ payload }) => {
-        
         if (payload.roomCode === roomCode && isHost) {
           const { cardEffect, playerId, playerName, effectId } = payload;
 
@@ -594,18 +623,16 @@ const QuizGame = () => {
             effect: cardEffect,
             duration: Math.max(1000, timeLeft * 1000),
             startTime: Date.now(),
-            targetPlayer: 0, 
+            targetPlayer: 0,
             expiresAtQuestionEnd: true,
           };
 
-          
           setActiveEffects((prev) => [...prev, cssEffect]);
           setGameModifiers((prev) => ({
             ...prev,
             cssEffects: [...prev.cssEffects, cardEffect.effect],
           }));
 
-          
           if (channelRef.current) {
             await channelRef.current.send({
               type: "broadcast",
@@ -618,7 +645,6 @@ const QuizGame = () => {
             });
           }
 
-          
           const cssTimeout = setTimeout(() => {
             setActiveEffects((prev) => prev.filter((e) => e.id !== effectId));
             setGameModifiers((prev) => ({
@@ -628,7 +654,6 @@ const QuizGame = () => {
               ),
             }));
 
-            
             if (channelRef.current) {
               channelRef.current.send({
                 type: "broadcast",
@@ -645,7 +670,6 @@ const QuizGame = () => {
         }
       })
       .on("broadcast", { event: "css_effect_applied" }, ({ payload }) => {
-        
         if (payload.roomCode === roomCode) {
           const { effect, cssEffectType } = payload;
 
@@ -655,7 +679,6 @@ const QuizGame = () => {
             cssEffects: [...prev.cssEffects, cssEffectType],
           }));
 
-          
           const cssTimeout = setTimeout(() => {
             setActiveEffects((prev) => prev.filter((e) => e.id !== effect.id));
             setGameModifiers((prev) => ({
@@ -670,7 +693,6 @@ const QuizGame = () => {
         }
       })
       .on("broadcast", { event: "css_effect_removed" }, ({ payload }) => {
-        
         if (payload.roomCode === roomCode) {
           const { effectId } = payload;
 
@@ -746,33 +768,28 @@ const QuizGame = () => {
         }
       })
       .on("broadcast", { event: "time_card_request" }, async ({ payload }) => {
-        
         if (payload.roomCode === roomCode && isHost) {
           const { cardEffect, playerId, playerName } = payload;
 
           let newTime = timeLeft;
 
-          if (
+          if (cardEffect.value === "100%") {
+            newTime = config?.gameSettings.timePerQuestion || 30;
+          } else if (
             typeof cardEffect.value === "string" &&
             cardEffect.value.includes("%")
           ) {
             const percent = parseInt(cardEffect.value.replace("%", ""), 10);
-            if (cardEffect.value === "100%") {
-              newTime = config?.gameSettings.timePerQuestion || 30;
-            } else {
-              newTime = Math.max(
-                1,
-                timeLeft + Math.floor((timeLeft * percent) / 100)
-              );
-            }
+            newTime = Math.max(
+              1,
+              timeLeft + Math.floor((timeLeft * percent) / 100)
+            );
           } else if (typeof cardEffect.value === "number") {
             newTime = Math.max(1, timeLeft + cardEffect.value);
           }
-
           setTimeLeft(newTime);
           await broadcastTimeUpdate(newTime);
 
-          
           await updateGameState({ current_time_left: newTime });
         }
       })
@@ -886,36 +903,28 @@ const QuizGame = () => {
       const { effect } = cardData;
       const currentTime = Date.now();
 
-      
       const handleTimeEffect = async () => {
-        
-        await handleTimeCardEffect(cardData, effect); 
+        await handleTimeCardEffect(cardData, effect);
       };
 
-      
-      
       const handleCssEffect = () => {
-        
         const cssEffect: ActiveCardEffect = {
           id: effectId,
           type: "css",
           effect,
           duration: Math.max(1000, timeLeft * 1000),
           startTime: currentTime,
-          targetPlayer: 0, 
+          targetPlayer: 0,
           expiresAtQuestionEnd: true,
         };
 
-        
         if (isHost) {
-          
           setActiveEffects((prev) => [...prev, cssEffect]);
           setGameModifiers((prev) => ({
             ...prev,
             cssEffects: [...prev.cssEffects, effect.effect],
           }));
 
-          
           if (channelRef.current) {
             channelRef.current.send({
               type: "broadcast",
@@ -928,7 +937,6 @@ const QuizGame = () => {
             });
           }
         } else {
-          
           if (channelRef.current) {
             channelRef.current.send({
               type: "broadcast",
@@ -942,10 +950,9 @@ const QuizGame = () => {
               },
             });
           }
-          return; 
+          return;
         }
 
-        
         const cssTimeout = setTimeout(() => {
           setActiveEffects((prev) => prev.filter((e) => e.id !== effectId));
           setGameModifiers((prev) => ({
@@ -953,7 +960,6 @@ const QuizGame = () => {
             cssEffects: prev.cssEffects.filter((css) => css !== effect.effect),
           }));
 
-          
           if (isHost && channelRef.current) {
             channelRef.current.send({
               type: "broadcast",
@@ -969,10 +975,8 @@ const QuizGame = () => {
         effectCleanupRef.current.push(cssTimeout);
       };
 
-      
       const handleScoreEffect = () => {
         if (effect.value === 2) {
-          
           const scoreEffect: ActiveCardEffect = {
             id: effectId,
             type: "score",
@@ -985,10 +989,9 @@ const QuizGame = () => {
           setActiveEffects((prev) => [...prev, scoreEffect]);
           setGameModifiers((prev) => ({
             ...prev,
-            scoreMultiplier: effect.value, 
+            scoreMultiplier: effect.value,
           }));
         } else if (effect.value > 1) {
-          
           const scoreEffect: ActiveCardEffect = {
             id: effectId,
             type: "score",
@@ -1003,7 +1006,6 @@ const QuizGame = () => {
             scoreMultiplier: effect.value,
           }));
         } else {
-          
           updatePlayersWithOptimization((prev) =>
             prev.map((player) =>
               player.id === currentPlayerId
@@ -1014,7 +1016,6 @@ const QuizGame = () => {
         }
       };
 
-      
       const handleAnswerEffect = () => {
         if (!currentQuestion) return;
 
@@ -1056,7 +1057,6 @@ const QuizGame = () => {
         }
       };
 
-      
       switch (effect.type) {
         case "time":
           handleTimeEffect();
@@ -1084,7 +1084,6 @@ const QuizGame = () => {
     ]
   );
 
-  
   const activeEffectsRef = useRef<ActiveCardEffect[]>([]);
   activeEffectsRef.current = activeEffects;
 
@@ -1092,12 +1091,10 @@ const QuizGame = () => {
     effectCleanupRef.current.forEach((timeout) => clearTimeout(timeout));
     effectCleanupRef.current = [];
 
-    
     setActiveEffects((prev) =>
       prev.filter((effect) => !effect.expiresAtQuestionEnd)
     );
 
-    
     setGameModifiers((prev) => ({
       timeModifier: 0,
       cssEffects: prev.cssEffects.filter(
@@ -1111,7 +1108,7 @@ const QuizGame = () => {
       fakeAnswers: prev.fakeAnswers,
       lockedAnswers: [],
     }));
-  }, []); 
+  }, []);
   const goToNextQuestion = useCallback(() => {
     if (gameOver || currentQuestionIndex + 1 >= maxQuestions) {
       setGameOver(true);
@@ -1192,13 +1189,11 @@ const QuizGame = () => {
       let earnedScore = 0;
 
       if (isCorrect) {
-        
         const activeScoreMultiplier = activeEffectsRef.current
           .filter(
             (effect) => effect.type === "score" && effect.expiresAtQuestionEnd
           )
           .reduce((multiplier, effect) => {
-            
             if (
               "value" in effect.effect &&
               typeof (effect.effect as any).value === "number" &&
@@ -1212,10 +1207,8 @@ const QuizGame = () => {
         earnedScore = Math.round(100 * activeScoreMultiplier);
         setRoundScore(earnedScore);
 
-        
         updatePlayerScore(currentPlayerId, earnedScore);
 
-        
         if (config?.selectedGameMode && config.selectedGameMode.id === 1) {
           if (allowedCards.length > 0) {
             const randomCard: Card = {
@@ -1533,10 +1526,8 @@ const QuizGame = () => {
     updateGameState,
   ]);
 
-  
   useEffect(() => {
     if (showCorrectAnswer || showLeaderboardAfterAnswer) {
-      
       const shouldClearEffects = activeEffects.some(
         (effect) => effect.expiresAtQuestionEnd
       );
