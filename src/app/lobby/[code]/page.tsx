@@ -563,6 +563,12 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     if (!canStartGame) return;
 
     try {
+      const resetPlayers = players.map((p) => ({
+        ...p,
+        score: 0,
+        cards: 0,
+      }));
+
       await supabase
         .from("room")
         .update({
@@ -572,6 +578,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           is_paused: null,
           game_over: null,
           updated_at: new Date().toISOString(),
+          player_list: resetPlayers.map((p) => JSON.stringify(p)),
         })
         .eq("room_code", roomCode);
 
@@ -588,7 +595,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           gameConfig: {
             gameSettings,
             selectedGameMode,
-            players,
+            players: resetPlayers,
           },
         },
       });
@@ -598,7 +605,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       window.location.href = `/play/${roomCode}`;
     } catch (error) {
       console.error("Error starting game:", error);
-
       alert("Failed to start game. Please try again.");
     }
   }, [
