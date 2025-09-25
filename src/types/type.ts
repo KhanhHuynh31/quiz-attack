@@ -1,6 +1,5 @@
 import { AvatarFullConfig } from "react-nice-avatar";
 
-// types.ts
 export interface QuizQuestion {
   id: number;
   question: string;
@@ -31,10 +30,9 @@ export interface PlayerData {
   player: Player;
   avatarConfig: AvatarFullConfig;
   customAvatarImage: string | null;
-  roomSettings?: RoomSettings; // Added roomSettings to PlayerData
+  roomSettings?: RoomSettings;
 }
 
-// Types
 export type TabType = "mode" | "settings" | "packs";
 
 export interface QuizAttackLobbyProps {
@@ -65,7 +63,7 @@ export interface QuizPack {
   category: string;
   questionCount: number;
   author: string;
-  // questions: any[]; // Or a more specific type if you have one
+
   isHidden?: boolean;
 }
 
@@ -97,28 +95,30 @@ export interface GameMode {
 export type PowerCardEffect =
   | { type: "time"; value: number }
   | {
-    value: number; type: "css"; effect: string 
-}
+      value: number;
+      type: "css";
+      effect: string;
+    }
   | { type: "score"; value: number }
   | { type: "answer"; mode: "remove" | "fake" | "lock"; count?: number };
 
 export interface ActiveCardEffect {
   id: string;
-  type: PowerCardEffect['type'];
+  type: PowerCardEffect["type"];
   effect: PowerCardEffect;
   duration?: number;
   startTime: number;
-  targetPlayer?: number; // 1 for current player, others for opponents
+  targetPlayer?: number;
   expiresAtQuestionEnd?: boolean;
 }
 
 export interface GameModifiers {
-  timeModifier: number; // Additional time (positive) or reduced time (negative)
-  cssEffects: string[]; // CSS effects to apply
-  scoreMultiplier: number; // Score multiplier for current question
-  removedAnswers: number[]; // Indices of removed wrong answers
-  fakeAnswers: string[]; // Fake answers to add
-  lockedAnswers: number[]; // Indices of locked answers
+  timeModifier: number;
+  cssEffects: string[];
+  scoreMultiplier: number;
+  removedAnswers: number[];
+  fakeAnswers: string[];
+  lockedAnswers: number[];
 }
 export interface Question {
   id: number;
@@ -131,14 +131,14 @@ export interface Question {
 
 export interface Card {
   id: number;
-  uniqueId?: string; // Thêm trường uniqueId
+  uniqueId?: string;
   name: string;
   description: string;
   color: string;
   value?: number;
-  emoji?: string; // Thêm trường mới
-  type?: string; // Thêm trường mới
-  effect?: any; // Thêm trường mới
+  emoji?: string;
+  type?: string;
+  effect?: any;
 }
 
 export interface CardUsage {

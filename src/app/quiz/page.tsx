@@ -25,12 +25,11 @@ import { supabase } from "@/lib/supabaseClient";
 import { Header } from "@/components/home/Header";
 import { useI18n } from "@/hooks/useI18n";
 import AuthModal from "@/components/users/AuthModal";
-import { loadFromLocalStorage, saveToLocalStorage } from "@/hooks/useLocalStorage";
+import {
+  loadFromLocalStorage,
+  saveToLocalStorage,
+} from "@/hooks/useLocalStorage";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import Background from "@/components/Background";
-import { FaHome } from "react-icons/fa";
-import { LanguageSelector } from "@/components/Selector/LanguageSelector";
 
 interface QuizPack {
   id: number;
@@ -109,15 +108,12 @@ const QuizPacksCRUD: React.FC = () => {
     image_url: "",
   });
 
-  // Authentication state
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  // Lấy danh mục từ database
   const categories = [...new Set(quizPacks.map((pack) => pack.category))];
 
-  // Animation variants
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -157,22 +153,23 @@ const QuizPacksCRUD: React.FC = () => {
     },
   };
 
-  // Check if user is admin
   const isAdmin = authUser?.auth === true;
 
-  // Load liked packs from localStorage
-useEffect(() => {
-  const savedLikesArray = loadFromLocalStorage<number[]>(LOCAL_STORAGE_KEYS.LIKED_PACKS, []);
-  setLikedPacks(new Set(Array.isArray(savedLikesArray) ? savedLikesArray : []));
-}, []);
+  useEffect(() => {
+    const savedLikesArray = loadFromLocalStorage<number[]>(
+      LOCAL_STORAGE_KEYS.LIKED_PACKS,
+      []
+    );
+    setLikedPacks(
+      new Set(Array.isArray(savedLikesArray) ? savedLikesArray : [])
+    );
+  }, []);
 
-  // Save liked packs to localStorage
   const saveLikedPacks = (newLiked: Set<number>) => {
     setLikedPacks(newLiked);
     saveToLocalStorage(LOCAL_STORAGE_KEYS.LIKED_PACKS, Array.from(newLiked));
   };
 
-  // Authentication effect
   useEffect(() => {
     let subscriptionCleanup: (() => void) | null = null;
 
@@ -250,7 +247,6 @@ useEffect(() => {
   const openAuthModal = () => setIsAuthModalOpen(true);
   const closeAuthModal = () => setIsAuthModalOpen(false);
 
-  // Count questions for a quiz pack
   const countQuestions = async (packId: number): Promise<number> => {
     try {
       const { data, error } = await supabase
@@ -266,7 +262,6 @@ useEffect(() => {
     }
   };
 
-  // Update question count for a quiz pack
   const updateQuestionCount = async (packId: number): Promise<void> => {
     try {
       const questionCount = await countQuestions(packId);
@@ -281,7 +276,6 @@ useEffect(() => {
     }
   };
 
-  // Fetch quiz packs and update question counts
   const fetchQuizPacks = async (): Promise<void> => {
     try {
       const { data, error } = await supabase
@@ -291,7 +285,6 @@ useEffect(() => {
 
       if (error) throw error;
 
-      // Update question counts for all packs
       const updatedPacks = await Promise.all(
         (data || []).map(async (pack) => {
           const questionCount = await countQuestions(pack.id);
@@ -312,7 +305,6 @@ useEffect(() => {
     }
   };
 
-  // Fetch questions for a specific pack
   const fetchQuestions = async (packId: number): Promise<void> => {
     try {
       const { data, error } = await supabase
@@ -329,7 +321,6 @@ useEffect(() => {
     }
   };
 
-  // Create or update quiz pack
   const saveQuizPack = async (): Promise<void> => {
     if (!authUser) {
       toast.error("Vui lòng đăng nhập để tạo quiz pack");
@@ -349,7 +340,6 @@ useEffect(() => {
 
       let result;
       if (editingPack) {
-        // For editing, only update if admin or own pack
         if (!isAdmin && editingPack.id_author !== authUser.id) {
           toast.error("Bạn không có quyền chỉnh sửa quiz pack này");
           return;
@@ -375,8 +365,11 @@ useEffect(() => {
     }
   };
 
-  // Delete quiz pack
-  const deleteQuizPack = async (id: number, author: string, id_author?: string): Promise<void> => {
+  const deleteQuizPack = async (
+    id: number,
+    author: string,
+    id_author?: string
+  ): Promise<void> => {
     if (!isAdmin && id_author !== authUser?.id) {
       toast.error("Bạn không có quyền xóa quiz pack này");
       return;
@@ -387,10 +380,8 @@ useEffect(() => {
     }
 
     try {
-      // First delete all questions in the pack
       await supabase.from("quiz_questions").delete().eq("quiz_pack_id", id);
 
-      // Then delete the pack
       const { error } = await supabase.from("quiz_packs").delete().eq("id", id);
 
       if (error) throw error;
@@ -403,7 +394,6 @@ useEffect(() => {
     }
   };
 
-  // Reset form
   const resetForm = (): void => {
     setFormData({
       name: "",
@@ -417,7 +407,6 @@ useEffect(() => {
     setShowCreateForm(false);
   };
 
-  // Open form for editing
   const openEditForm = (pack: QuizPack): void => {
     if (!isAdmin && pack.id_author !== authUser?.id) {
       toast.error("Bạn không có quyền chỉnh sửa quiz pack này");
@@ -434,7 +423,6 @@ useEffect(() => {
     setShowCreateForm(true);
   };
 
-  // Toggle questions view
   const toggleQuestions = async (packId: number): Promise<void> => {
     if (viewingQuestions === packId) {
       setViewingQuestions(null);
@@ -447,7 +435,6 @@ useEffect(() => {
     }
   };
 
-  // Toggle like
   const toggleLike = (packId: number): void => {
     const newLiked = new Set(likedPacks);
     if (newLiked.has(packId)) {
@@ -458,7 +445,6 @@ useEffect(() => {
     saveLikedPacks(newLiked);
   };
 
-  // Handle category selection
   const handleCategorySelect = (category: string): void => {
     if (category === "new") {
       setShowCategoryInput(true);
@@ -471,7 +457,6 @@ useEffect(() => {
     }
   };
 
-  // Handle custom category input
   const handleCategoryInputChange = (
     e: ChangeEvent<HTMLInputElement>
   ): void => {
@@ -480,13 +465,11 @@ useEffect(() => {
     setFormData({ ...formData, category: value });
   };
 
-  // Handle form submission
   const handleSubmit = (e: FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
     saveQuizPack();
   };
 
-  // Reset question form
   const resetQuestionForm = (): void => {
     setQuestionFormData({
       question: "",
@@ -498,7 +481,6 @@ useEffect(() => {
     setEditingQuestion(null);
   };
 
-  // Handle question input change
   const handleQuestionInputChange = (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ): void => {
@@ -506,14 +488,12 @@ useEffect(() => {
     setQuestionFormData({ ...questionFormData, [name]: value });
   };
 
-  // Handle option change
   const handleOptionChange = (index: number, value: string): void => {
     const newOptions = [...questionFormData.options];
     newOptions[index] = value;
     setQuestionFormData({ ...questionFormData, options: newOptions });
   };
 
-  // Save question
   const saveQuestion = async (): Promise<void> => {
     if (!viewingQuestions) return;
 
@@ -551,7 +531,6 @@ useEffect(() => {
     }
   };
 
-  // Delete question
   const deleteQuestion = async (id: number): Promise<void> => {
     if (!window.confirm("Bạn có chắc chắn muốn xóa câu hỏi này?")) {
       return;
@@ -576,7 +555,6 @@ useEffect(() => {
     }
   };
 
-  // Edit question
   const editQuestion = (question: QuizQuestion): void => {
     setEditingQuestion(question);
     setQuestionFormData({
@@ -593,7 +571,6 @@ useEffect(() => {
     fetchQuizPacks();
   }, []);
 
-  // Filter quiz packs
   const filteredPacks = quizPacks.filter((pack) => {
     const matchesSearch =
       pack.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1015,7 +992,9 @@ useEffect(() => {
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          onClick={() => deleteQuizPack(pack.id, pack.author, pack.id_author)}
+                          onClick={() =>
+                            deleteQuizPack(pack.id, pack.author, pack.id_author)
+                          }
                           className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-500/20 to-pink-500/20 text-red-300 rounded-xl hover:from-red-500/30 hover:to-pink-500/30 transition-all duration-300 border border-red-500/30"
                         >
                           <FiTrash2 className="w-4 h-4" />
@@ -1089,7 +1068,8 @@ useEffect(() => {
 
               {/* Question Form - Only for non-official or admin */}
               {(quizPacks.find((p) => p.id === viewingQuestions)?.author !==
-                "official" || isAdmin) && (
+                "official" ||
+                isAdmin) && (
                 <div className="mb-8 bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-xl font-bold text-white">
@@ -1283,7 +1263,9 @@ useEffect(() => {
                         </div>
 
                         {/* Question Actions - Only for non-official or admin */}
-                        {(quizPacks.find((p) => p.id === viewingQuestions)?.author !== "official" || isAdmin) && (
+                        {(quizPacks.find((p) => p.id === viewingQuestions)
+                          ?.author !== "official" ||
+                          isAdmin) && (
                           <div className="flex gap-2">
                             <motion.button
                               whileHover={{ scale: 1.05 }}
@@ -1360,72 +1342,6 @@ useEffect(() => {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Custom Scrollbar Styles */}
-      <style jsx global>{`
-        .line-clamp-2 {
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-
-        /* Floating animation */
-        @keyframes float {
-          0%,
-          100% {
-            transform: translateY(0px);
-          }
-          50% {
-            transform: translateY(-10px);
-          }
-        }
-
-        /* Gradient animation */
-        @keyframes gradient {
-          0% {
-            background-position: 0% 50%;
-          }
-          50% {
-            background-position: 100% 50%;
-          }
-          100% {
-            background-position: 0% 50%;
-          }
-        }
-
-        .animate-gradient {
-          background-size: 200% 200%;
-          animation: gradient 3s ease infinite;
-        }
-
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-          width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.3);
-          border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.5);
-        }
-
-        /* Select dropdown arrow */
-        select {
-          background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-          background-position: right 12px center;
-          background-repeat: no-repeat;
-          background-size: 16px;
-        }
-      `}</style>
     </div>
   );
 };

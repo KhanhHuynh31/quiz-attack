@@ -25,7 +25,6 @@ import {
   FaLock,
 } from "react-icons/fa";
 
-// Components
 import { QRCodeModal } from "@/components/QrCodeModal";
 import { ShareSection } from "@/components/lobby/ShareSection";
 import GameSettingSelector from "@/components/Selector/GameSetingSelector";
@@ -34,12 +33,10 @@ import QuizPackSelector from "@/components/Selector/QuizPackSelector";
 import PlayerCard from "@/components/PlayerCard";
 import { LanguageSelector } from "@/components/Selector/LanguageSelector";
 
-// Hooks
 import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
 import { useI18n } from "@/hooks/useI18n";
 import { loadPlayerData } from "@/hooks/useLocalStorage";
 
-// Types and Data
 import {
   GameMode,
   GameSettings,
@@ -55,14 +52,12 @@ import { DEFAULT_QUIZ_PACKS } from "@/data/quizData";
 import { GAME_MODES } from "@/data/modeData";
 import { supabase } from "@/lib/supabaseClient";
 
-// Constants
 const TABS = [
   { key: "mode" as const, icon: FaGamepad, labelKey: "gameMode" as const },
   { key: "packs" as const, icon: FaBook, labelKey: "quizPacks" as const },
   { key: "settings" as const, icon: FaCog, labelKey: "settings" as const },
 ] as const;
 
-// Animation Variants
 const animations = {
   header: {
     initial: { y: -80, opacity: 0 },
@@ -93,7 +88,6 @@ const animations = {
   },
 } as const;
 
-// Utility Functions
 const generateRoomCode = (): string => {
   if (typeof window === "undefined") return "QUIZ123";
   try {
@@ -113,7 +107,6 @@ const generateShareLink = (roomCode: string): string => {
   }
 };
 
-// Custom Hooks
 const useRoomData = (initialRoomCode?: string) => {
   const [roomCode, setRoomCode] = useState<string>("");
   const [shareLink, setShareLink] = useState<string>("");
@@ -170,7 +163,7 @@ const useSupabaseRoom = (
           setIsLoading(false);
           return;
         }
-        // Create new room
+
         const defaultSettingList = [JSON.stringify(DEFAULT_GAME_SETTINGS)];
         const defaultGameMode = GAME_MODES[0]?.id || 1;
         const defaultQuizPack = DEFAULT_QUIZ_PACKS[0].id;
@@ -194,7 +187,6 @@ const useSupabaseRoom = (
         room = newRoom;
       }
 
-      // Load data from room
       const parsedSettings = room.setting_list?.[0]
         ? JSON.parse(room.setting_list[0])
         : DEFAULT_GAME_SETTINGS;
@@ -249,7 +241,6 @@ const useSupabaseRoom = (
     [roomCode, roomPassword]
   );
 
-  // Debounced save function for real-time updates
   const debouncedSaveRoomData = useCallback(
     (settings: GameSettings, gameMode: GameMode | null) => {
       if (saveTimeoutRef.current) {
@@ -267,7 +258,6 @@ const useSupabaseRoom = (
     loadRoomData();
   }, [loadRoomData]);
 
-  // Handle realtime presence for players - only if verified
   useEffect(() => {
     if (!roomCode || !playerData?.player?.id || !isVerified) return;
 
@@ -305,17 +295,16 @@ const useSupabaseRoom = (
           setRoomClosed(true);
         }
       })
-      // Listen for settings updates
+
       .on("broadcast", { event: "settings_update" }, ({ payload }) => {
         if (payload.roomCode === roomCode && !playerData.player.isHost) {
           setGameSettings(payload.settings);
           setSelectedGameMode(payload.gameMode);
         }
       })
-      // Add listener for game start event
+
       .on("broadcast", { event: "game_start" }, async ({ payload }) => {
         if (payload.roomCode === roomCode && !playerData.player.isHost) {
-          // Navigate to game page
           window.location.href = `/play/${roomCode}`;
         }
       })
@@ -349,11 +338,9 @@ const useSupabaseRoom = (
   };
 };
 
-// Main Component
 const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   initialRoomCode,
 }) => {
-  // Hooks
   const { language } = useI18n();
   const { staggerChildren, slideInLeft, slideInRight, fadeUp } =
     useEnhancedAnimations();
@@ -365,7 +352,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   const [passwordValidated, setPasswordValidated] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
 
-  // Determine if player is verified (has valid data and password if required)
   const isPlayerVerified = useMemo(() => {
     return (
       dataLoaded &&
@@ -390,10 +376,9 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     roomPassword,
   } = useSupabaseRoom(roomCode, playerData, Boolean(isPlayerVerified));
 
-  // Check if stored password matches room password
   const checkPasswordValidity = useCallback(
     (currentRoomPassword: string | null): boolean => {
-      if (!currentRoomPassword) return true; // No password required
+      if (!currentRoomPassword) return true;
 
       const storedRoomSettings = playerData?.roomSettings;
       return !!(
@@ -405,13 +390,11 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     [playerData, roomCode]
   );
 
-  // Player data and permissions
   const isHost = useMemo(
     () => playerData?.player.isHost ?? false,
     [playerData]
   );
 
-  // UI State
   const [showQRCode, setShowQRCode] = useState(false);
   const [showRoomCode, setShowRoomCode] = useState(false);
   const [showRoomPass, setShowRoomPass] = useState(false);
@@ -421,7 +404,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   const [isTabChanging, setIsTabChanging] = useState(false);
   const [showPlayersOnMobile, setShowPlayersOnMobile] = useState(false);
 
-  // Translations
   const t = useMemo(
     () =>
       lobbyTranslations[language as keyof typeof lobbyTranslations] ||
@@ -429,19 +411,16 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     [language]
   );
 
-  // Computed values
   const playerCount = players.length;
   const maskedRoomCode = showRoomCode ? roomCode : "••••••";
   const maskedRoomPass = showRoomPass ? roomPassword : "••••••";
 
   const canStartGame = isHost && !isLoading && isPlayerVerified;
 
-  // Kiểm tra xem có phải là Quiz Mode (mode 2) không
   const isQuizMode = useMemo(() => {
     return selectedGameMode?.id === 2;
   }, [selectedGameMode]);
 
-  // Load player data and check if redirect is needed
   useEffect(() => {
     const data = loadPlayerData();
     setPlayerData(data);
@@ -453,7 +432,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     setDataLoaded(true);
   }, []);
 
-  // Check if player needs to be redirected to join page
   useEffect(() => {
     if (!dataLoaded || isLoading) return;
 
@@ -462,7 +440,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       return;
     }
 
-    // Check password if room has one and player data is loaded
     if (roomPassword) {
       const isValid = checkPasswordValidity(roomPassword);
       setPasswordValidated(isValid);
@@ -482,7 +459,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     router,
   ]);
 
-  // Handle window resize
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 1024) {
@@ -495,12 +471,10 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Update settings in database when changed by host
   useEffect(() => {
     if (isHost && dataLoaded && isPlayerVerified) {
       debouncedSaveRoomData(gameSettings, selectedGameMode);
 
-      // Broadcast settings to other players
       const channel = supabase.channel(`room:${roomCode}`);
       channel.send({
         type: "broadcast",
@@ -522,7 +496,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     isPlayerVerified,
   ]);
 
-  // Event Handlers
   const handleSettingChange = useCallback(
     <K extends keyof GameSettings>(key: K, value: GameSettings[K]) => {
       if (!isHost) return;
@@ -552,7 +525,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       if (!isHost) return;
 
       try {
-        // Send a kick notification to the player's personal channel
         const channel = supabase.channel(`player:${playerId}`);
         await channel.send({
           type: "broadcast",
@@ -560,7 +532,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           payload: { roomCode },
         });
 
-        // Remove player from local state
         setPlayers((prev) => prev.filter((player) => player.id !== playerId));
       } catch (error) {
         console.error("Error kicking player:", error);
@@ -569,17 +540,14 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     [isHost, roomCode, setPlayers]
   );
 
-  // Add useEffect to handle kick notifications for the current player
   useEffect(() => {
     if (!playerData?.player?.id || !isPlayerVerified) return;
 
-    // Subscribe to personal channel for kick notifications
     const personalChannel = supabase.channel(`player:${playerData.player.id}`);
 
     personalChannel
       .on("broadcast", { event: "kicked" }, (payload) => {
         if (payload.payload.roomCode === roomCode) {
-          // Show notification and redirect to home
           alert("You have been kicked from the room by the host.");
           router.push("/?message=kicked");
         }
@@ -595,11 +563,10 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     if (!canStartGame) return;
 
     try {
-      // 1. Reset game state và cập nhật room status trong database
       await supabase
         .from("room")
         .update({
-          room_status: 1, // Thêm trường room_status
+          room_status: 1,
           current_question_index: null,
           current_time_left: null,
           is_paused: null,
@@ -608,13 +575,10 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
         })
         .eq("room_code", roomCode);
 
-      // 2. Save room data to database (sau khi đã reset state)
       await saveRoomData(gameSettings, selectedGameMode);
 
-      // 3. Wait a bit to ensure database is updated
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // 4. Broadcast game start event to all players
       const channel = supabase.channel(`room:${roomCode}`);
       await channel.send({
         type: "broadcast",
@@ -629,14 +593,12 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
         },
       });
 
-      // 5. Wait a bit more to ensure broadcast is sent
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      // 6. Navigate host to game page
       window.location.href = `/play/${roomCode}`;
     } catch (error) {
       console.error("Error starting game:", error);
-      // Show error message to user
+
       alert("Failed to start game. Please try again.");
     }
   }, [
@@ -667,7 +629,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     router.push("/");
   }, [isHost, roomCode, router]);
 
-  // Don't render the lobby until data is loaded and verified
   if (!dataLoaded || isLoading || !isPlayerVerified) {
     return (
       <div className="min-h-screen flex items-center justify-center text-white">
@@ -698,7 +659,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       animate="visible"
       className="flex flex-col-reverse gap-4 lg:flex-row mb-2 justify-between"
     >
-      {/* Mobile Dropdown */}
       <div className="block lg:hidden relative w-full">
         <motion.button
           whileHover={{ scale: 1.02 }}
@@ -766,7 +726,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
         </AnimatePresence>
       </div>
 
-      {/* Desktop Tabs */}
       <div className="hidden lg:flex space-x-3">
         {TABS.map((tab) => {
           const IconComponent = tab.icon;
@@ -800,7 +759,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
         })}
       </div>
 
-      {/* Start Game Button */}
       <motion.div
         {...animations.startButton}
         className="flex-shrink-0 w-full lg:w-auto"
@@ -823,7 +781,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
               : "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 border-green-400/50"
           }`}
         >
-          {/* Animated background effect */}
           {canStartGame && (
             <motion.div
               className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
@@ -911,7 +868,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
         icon: FaCog,
         iconColor: "text-gray-400",
         component: (
-          // Thêm prop isQuizMode để ẩn các setting về thẻ sức mạnh
           <GameSettingSelector
             settings={gameSettings}
             onSettingChange={isHost ? handleSettingChange : () => {}}
@@ -1037,15 +993,12 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
 
   return (
     <div className="min-h-screen text-white flex flex-col lg:max-h-screen lg:overflow-hidden">
-      {/* Header */}
       <motion.header
         {...animations.header}
         className="flex flex-col md:flex-row md:items-center md:justify-between 
              p-4 md:p-6 h-auto md:h-24 flex-shrink-0 relative z-10 "
       >
-        {/* Top row: Home + Language (mobile) */}
         <div className="flex w-full items-center justify-between md:w-auto">
-          {/* Home button */}
           <motion.button
             whileHover={{ scale: 1.05, y: -2 }}
             whileTap={{ scale: 0.95 }}
@@ -1064,13 +1017,11 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             <span className="font-medium text-sm md:text-base">{t.home}</span>
           </motion.button>
 
-          {/* Language selector */}
           <div className="block md:hidden">
             <LanguageSelector />
           </div>
         </div>
 
-        {/* Title & room info */}
         <motion.div
           initial={{ scale: 0, y: -20 }}
           animate={{ scale: 1, y: 0 }}
@@ -1088,9 +1039,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             Quiz Attack
           </motion.h1>
 
-          {/* room code & pass */}
           <div className="flex flex-wrap items-center gap-2 md:gap-4 justify-center mt-2">
-            {/* Room code */}
             <div className="flex items-center justify-center space-x-2 md:space-x-3">
               <span className="text-xs md:text-sm text-white/70 font-medium">
                 {t.room}:
@@ -1113,7 +1062,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
               </div>
             </div>
 
-            {/* Room password */}
             {roomPassword && (
               <div className="flex items-center justify-center space-x-2 md:space-x-3">
                 <span className="text-xs md:text-sm text-white/70 font-medium">
@@ -1140,15 +1088,12 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           </div>
         </motion.div>
 
-        {/* Language selector (desktop) */}
         <div className="hidden md:block">
           <LanguageSelector />
         </div>
       </motion.header>
 
-      {/* Main Content */}
       <main className="flex-1 px-2 pb-2 sm:px-4 sm:pb-4 md:px-6 md:pb-6 overflow-y-auto lg:overflow-hidden flex flex-col">
-        {/* Mobile Toggle Players Button */}
         <AnimatePresence>
           {!showPlayersOnMobile && (
             <motion.div
@@ -1176,7 +1121,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
         </AnimatePresence>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full max-w-8xl mx-auto w-full flex-1 min-h-0 lg:overflow-hidden">
-          {/* Players List - Mobile Expandable / Desktop Left Panel */}
           <AnimatePresence>
             {showPlayersOnMobile && (
               <motion.div
@@ -1188,10 +1132,8 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             )}
           </AnimatePresence>
 
-          {/* Desktop Players List */}
           <div className="hidden lg:block">{renderPlayersList()}</div>
 
-          {/* Game Configuration - Right Panel */}
           <motion.section
             variants={slideInRight}
             initial="hidden"
@@ -1214,7 +1156,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
         </div>
       </main>
 
-      {/* QR Code Modal */}
       <QRCodeModal
         isOpen={showQRCode}
         onClose={() => setShowQRCode(false)}

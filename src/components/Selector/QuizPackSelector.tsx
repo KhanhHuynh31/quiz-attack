@@ -1,4 +1,3 @@
-// File: QuizPackSelector.tsx
 "use client";
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,7 +13,6 @@ interface QuizPackItemProps {
   index: number;
 }
 
-// QuizPackItem Component với animation tương tự GameModeItem
 const QuizPackItem: React.FC<QuizPackItemProps> = ({
   pack,
   isSelected,
@@ -87,10 +85,14 @@ const QuizPackItem: React.FC<QuizPackItemProps> = ({
           </motion.span>
 
           <div className="flex items-center gap-2">
-            <span className={`text-xs ${
-              pack.author === "official" ? "text-yellow-400" : "text-blue-400"
-            }`}>
-              {pack.author === "official" ? "Chính thức" : pack.author || "Cộng đồng"}
+            <span
+              className={`text-xs ${
+                pack.author === "official" ? "text-yellow-400" : "text-blue-400"
+              }`}
+            >
+              {pack.author === "official"
+                ? "Chính thức"
+                : pack.author || "Cộng đồng"}
             </span>
             <AnimatePresence>
               {isSelected && (
@@ -111,7 +113,6 @@ const QuizPackItem: React.FC<QuizPackItemProps> = ({
   );
 };
 
-// Main QuizPackSelector Component
 interface QuizPackSelectorProps {
   selectedPack: QuizPack | null;
   onPackSelect: (pack: QuizPack) => void;
@@ -126,12 +127,10 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
   const [dbPacks, setDbPacks] = useState<QuizPack[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch quiz packs từ database
   const fetchQuizPacks = async (): Promise<void> => {
     try {
       setLoading(true);
-      
-      // Lấy danh sách quiz packs từ database
+
       const { data: packsData, error: packsError } = await supabase
         .from("quiz_packs")
         .select("*")
@@ -144,10 +143,8 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
         return;
       }
 
-      // Chuyển đổi dữ liệu từ database sang QuizPack type
       const convertedPacks: QuizPack[] = await Promise.all(
         packsData.map(async (pack) => {
-          // Đếm số câu hỏi thực tế cho mỗi pack
           const { count: questionCount, error: countError } = await supabase
             .from("quiz_questions")
             .select("id", { count: "exact" })
@@ -164,7 +161,7 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
             category: pack.category,
             author: pack.author,
             questionCount: questionCount || pack.question_count || 0,
-            isHidden: false
+            isHidden: false,
           };
         })
       );
@@ -182,16 +179,16 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
     fetchQuizPacks();
   }, []);
 
-  // Kết hợp dbPacks và customPacks
   const allPacks = [...dbPacks, ...customPacks];
 
-  // Đảm bảo luôn có một pack được chọn mặc định
   useEffect(() => {
     if (!selectedPack && allPacks.length > 0 && !loading) {
-      // Ưu tiên chọn pack chính thức đầu tiên, nếu không có thì chọn pack đầu tiên
-      const firstOfficialPack = allPacks.find((pack) => pack.author === "official");
-      const firstVisiblePack = firstOfficialPack || allPacks.find((pack) => !pack.isHidden);
-      
+      const firstOfficialPack = allPacks.find(
+        (pack) => pack.author === "official"
+      );
+      const firstVisiblePack =
+        firstOfficialPack || allPacks.find((pack) => !pack.isHidden);
+
       if (firstVisiblePack) {
         onPackSelect(firstVisiblePack);
       }
@@ -255,7 +252,9 @@ export const QuizPackSelector: React.FC<QuizPackSelectorProps> = ({
           <div className="text-center py-8">
             <FaBook className="w-12 h-12 text-white/40 mx-auto mb-4" />
             <p className="text-white/60 text-sm">Chưa có quiz pack nào</p>
-            <p className="text-white/40 text-xs mt-1">Hãy tạo quiz pack đầu tiên của bạn</p>
+            <p className="text-white/40 text-xs mt-1">
+              Hãy tạo quiz pack đầu tiên của bạn
+            </p>
           </div>
         )}
 

@@ -1,4 +1,3 @@
-// lib/gameConfig.ts
 import { GameConfig, GameSettings } from "@/types/type";
 
 export const DEFAULT_GAME_SETTINGS: GameSettings = {

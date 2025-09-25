@@ -23,14 +23,12 @@ const generateParticles = (count: number): Particle[] =>
 const Background: React.FC = React.memo(() => {
   const [particles, setParticles] = useState<Particle[]>([]);
 
-  // chỉ chạy trên client sau khi mount
   useEffect(() => {
     setParticles(generateParticles(20));
   }, []);
 
   return (
     <div className="fixed inset-0 -z-10">
-      {/* Gradient animate */}
       <motion.div
         className="absolute inset-0 bg-gradient-to-br from-[#1a1b3a] via-[#2d1b69] to-[#0f0f23]"
         animate={{
@@ -43,7 +41,6 @@ const Background: React.FC = React.memo(() => {
         transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
       />
 
-      {/* Floating particles */}
       {particles.map((p) => (
         <motion.div
           key={p.id}
@@ -63,7 +60,6 @@ const Background: React.FC = React.memo(() => {
         />
       ))}
 
-      {/* Grid pattern overlay */}
       <div
         className="absolute inset-0 opacity-10"
         style={{

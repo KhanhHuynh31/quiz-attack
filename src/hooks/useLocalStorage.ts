@@ -1,6 +1,3 @@
-
-// Local storage keys
-
 import { PlayerData } from "@/types/type";
 const STORAGE_KEY = "quizAttack_playerData";
 export const LOCAL_STORAGE_KEYS = {
@@ -33,7 +30,7 @@ export const saveToLocalStorage = <T,>(key: string, value: T): void => {
   }
 };
 export function loadPlayerData(): PlayerData | null {
-  if (typeof window === "undefined") return null; // tránh lỗi khi SSR trong Next.js
+  if (typeof window === "undefined") return null;
 
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

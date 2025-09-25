@@ -26,10 +26,8 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
     lobbyTranslations[language as keyof typeof lobbyTranslations] ||
     lobbyTranslations.en;
 
-  // Phân tích avatar data từ trường avatar duy nhất
   const getAvatarContent = () => {
     try {
-      // Nếu avatar là URL hình ảnh (bắt đầu với http/https)
       if (player.avatar?.startsWith("http")) {
         return (
           <img
@@ -40,24 +38,21 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
         );
       }
 
-      // Nếu avatar là JSON string chứa cấu hình react-nice-avatar
       if (player.avatar?.startsWith("{")) {
         const config = JSON.parse(player.avatar) as AvatarFullConfig;
         return <Avatar className="w-full h-full" {...config} />;
       }
 
-      // Nếu avatar là emoji hoặc string ngắn, tạo config từ đó
       if (player.avatar) {
         const config = genConfig(player.avatar);
         return <Avatar className="w-full h-full" {...config} />;
       }
 
-      // Fallback: tạo avatar ngẫu nhiên
       const config = genConfig();
       return <Avatar className="w-full h-full" {...config} />;
     } catch (error) {
       console.error("Error parsing avatar:", error);
-      // Fallback: tạo avatar ngẫu nhiên nếu có lỗi
+
       const config = genConfig();
       return <Avatar className="w-full h-full" {...config} />;
     }

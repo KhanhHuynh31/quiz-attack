@@ -1,4 +1,3 @@
-// components/LanguageSelector.tsx
 "use client";
 import React, { useState, useRef, useEffect } from "react";
 import { FaChevronDown } from "react-icons/fa";
@@ -15,7 +14,7 @@ interface LanguageSelectorProps {
 interface LanguageOption {
   code: LanguageCode;
   label: string;
-  countryCode: string; 
+  countryCode: string;
 }
 
 export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
@@ -67,20 +66,19 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
     setIsOpen(!isOpen);
   };
 
-  // Animation variants
   const buttonVariants = {
-    idle: { 
+    idle: {
       scale: 1,
       boxShadow: "0 4px 20px rgba(59, 130, 246, 0.1)",
     },
-    hover: { 
+    hover: {
       scale: 1.02,
       boxShadow: "0 8px 30px rgba(59, 130, 246, 0.2)",
       backgroundColor: "rgba(255, 255, 255, 0.15)",
     },
-    tap: { 
+    tap: {
       scale: 0.98,
-    }
+    },
   };
 
   const dropdownVariants = {
@@ -98,7 +96,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
         damping: 20,
         stiffness: 300,
         duration: 0.2,
-      }
+      },
     },
     exit: {
       opacity: 0,
@@ -106,9 +104,9 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
       y: -8,
       transition: {
         duration: 0.15,
-        ease: "easeInOut" as const
-      }
-    }
+        ease: "easeInOut" as const,
+      },
+    },
   };
 
   const itemVariants = {
@@ -121,7 +119,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
         type: "spring" as const,
         damping: 25,
         stiffness: 400,
-      }
+      },
     }),
     hover: {
       x: 2,
@@ -130,20 +128,20 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
         type: "spring" as const,
         damping: 20,
         stiffness: 400,
-      }
-    }
+      },
+    },
   };
 
   const chevronVariants = {
     closed: { rotate: 0 },
-    open: { 
+    open: {
       rotate: 180,
       transition: {
         type: "spring" as const,
         damping: 15,
         stiffness: 300,
-      }
-    }
+      },
+    },
   };
 
   return (
@@ -190,28 +188,34 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
               className="flex items-center justify-center"
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: "spring" as const, damping: 20, stiffness: 300 }}
+              transition={{
+                type: "spring" as const,
+                damping: 20,
+                stiffness: 300,
+              }}
             >
               <motion.div
-                className={`${isMobile ? "w-8 h-6" : "w-6 h-4"} rounded-sm overflow-hidden shadow-md`}
-                whileHover={{ 
+                className={`${
+                  isMobile ? "w-8 h-6" : "w-6 h-4"
+                } rounded-sm overflow-hidden shadow-md`}
+                whileHover={{
                   scale: 1.1,
                   y: -2,
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.2)"
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
                 }}
-                transition={{ 
-                  type: "spring" as const, 
-                  damping: 15, 
-                  stiffness: 400
+                transition={{
+                  type: "spring" as const,
+                  damping: 15,
+                  stiffness: 400,
                 }}
               >
-                <Flag 
-                  code={selectedOption.countryCode} 
-                  style={{ 
-                    width: "100%", 
-                    height: "100%", 
-                    objectFit: "cover" 
-                  }} 
+                <Flag
+                  code={selectedOption.countryCode}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  }}
                 />
               </motion.div>
             </motion.div>
@@ -266,9 +270,10 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
                   className={`
                     list-none flex cursor-pointer items-center gap-3 
                     px-3 py-2.5 rounded-lg transition-all duration-200
-                    ${selectedOption?.code === option.code 
-                      ? "bg-gradient-to-r from-blue-500/15 to-purple-500/15 border border-blue-400/20" 
-                      : "hover:bg-white/5"
+                    ${
+                      selectedOption?.code === option.code
+                        ? "bg-gradient-to-r from-blue-500/15 to-purple-500/15 border border-blue-400/20"
+                        : "hover:bg-white/5"
                     }
                   `}
                   onClick={() => handleOptionClick(option)}
@@ -277,39 +282,39 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
                 >
                   <motion.div
                     className="w-6 h-4 rounded-sm overflow-hidden shadow-sm"
-                    whileHover={{ 
+                    whileHover={{
                       scale: 1.1,
-                      y: -1
+                      y: -1,
                     }}
-                    transition={{ 
-                      type: "spring" as const, 
-                      damping: 12, 
-                      stiffness: 400
+                    transition={{
+                      type: "spring" as const,
+                      damping: 12,
+                      stiffness: 400,
                     }}
                   >
-                    <Flag 
-                      code={option.countryCode} 
-                      style={{ 
-                        width: "100%", 
-                        height: "100%", 
-                        objectFit: "cover" 
-                      }} 
+                    <Flag
+                      code={option.countryCode}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
                     />
                   </motion.div>
-                  
+
                   <span className="flex-1 text-white font-medium text-sm">
                     {option.label}
                   </span>
-                  
+
                   {selectedOption?.code === option.code && (
                     <motion.div
                       initial={{ scale: 0, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
-                      transition={{ 
-                        type: "spring" as const, 
-                        damping: 15, 
+                      transition={{
+                        type: "spring" as const,
+                        damping: 15,
                         stiffness: 400,
-                        delay: 0.1 
+                        delay: 0.1,
                       }}
                       className="relative"
                     >

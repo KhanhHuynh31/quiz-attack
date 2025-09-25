@@ -1,4 +1,3 @@
-// components/lobby/GameSettingSelector.tsx
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -21,10 +20,9 @@ interface GameSettingSelectorProps {
     key: K,
     value: GameSettings[K]
   ) => void;
-  isQuizMode?: boolean; // Thêm prop mới để xác định có phải Quiz Mode không
+  isQuizMode?: boolean;
 }
 
-// Constants for easy maintenance
 const TIME_OPTIONS = [10, 15, 20, 30, 45, 60] as const;
 const ROUND_OPTIONS = [5, 10, 15, 20, 25, 30] as const;
 const TIME_LIMITS = { min: 5, max: 120 } as const;
@@ -33,14 +31,13 @@ const ROUND_LIMITS = { min: 1, max: 50 } as const;
 const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
   settings,
   onSettingChange,
-  isQuizMode = false, // Giá trị mặc định là false
+  isQuizMode = false,
 }) => {
   const { language } = useI18n();
   const t =
     lobbyTranslations[language as keyof typeof lobbyTranslations] ||
     lobbyTranslations.en;
 
-  // Form states
   const [customTimeInput, setCustomTimeInput] = useState(false);
   const [customRoundInput, setCustomRoundInput] = useState(false);
   const [tempCustomTime, setTempCustomTime] = useState(
@@ -51,7 +48,7 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
   );
   const [selectedCardType, setSelectedCardType] = useState<string>("all");
   const [isOpen, setIsOpen] = useState(false);
-  // Memoized calculations - ensure card IDs are strings
+
   const allCardIds = useMemo(
     () => powerCards.map((card) => card.id.toString()),
     []
@@ -73,20 +70,16 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
     [selectedCardType]
   );
 
-  // Xử lý logic thẻ sức mạnh được chọn - đảm bảo mặc định tất cả được chọn
   const effectiveAllowedCards = useMemo(() => {
-    // Nếu là Quiz Mode, không cần xử lý thẻ sức mạnh
     if (isQuizMode) return [];
 
-    // Nếu chưa có allowedCards hoặc rỗng, trả về tất cả thẻ để hiển thị đúng UI
     if (!settings.allowedCards || settings.allowedCards.length === 0) {
       return allCardIds;
     }
-    // Ensure all values are strings
+
     return settings.allowedCards.map((card) => card.toString());
   }, [settings.allowedCards, allCardIds, isQuizMode]);
 
-  // Initialize allowed cards if empty (ensures default selection) - chỉ khi không phải Quiz Mode
   useEffect(() => {
     if (
       !isQuizMode &&
@@ -96,13 +89,11 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
     }
   }, [allCardIds, onSettingChange, settings.allowedCards, isQuizMode]);
 
-  // Update temp values when settings change
   useEffect(() => {
     setTempCustomTime(settings.timePerQuestion.toString());
     setTempCustomRounds(settings.numberOfQuestion.toString());
   }, [settings.timePerQuestion, settings.numberOfQuestion]);
 
-  // Callback functions
   const handleCustomTimeSubmit = useCallback(() => {
     const timeValue = parseInt(tempCustomTime);
     if (timeValue >= TIME_LIMITS.min && timeValue <= TIME_LIMITS.max) {
@@ -127,14 +118,11 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
       let newCards: string[];
 
       if (isCurrentlySelected) {
-        // Bỏ chọn thẻ - đảm bảo ít nhất 1 thẻ được chọn
         newCards = currentCards.filter((c) => c !== cardId);
         if (newCards.length === 0) {
-          // Không cho phép bỏ chọn tất cả, giữ lại thẻ hiện tại
           return;
         }
       } else {
-        // Thêm thẻ vào danh sách được chọn
         newCards = [...currentCards, cardId];
       }
 
@@ -143,7 +131,6 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
     [effectiveAllowedCards, onSettingChange]
   );
 
-  // Helper function to check if a card is selected
   const isCardSelected = useCallback(
     (cardId: string) => effectiveAllowedCards.includes(cardId.toString()),
     [effectiveAllowedCards]
@@ -151,7 +138,6 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Time Per Question */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -250,7 +236,6 @@ const GameSettingSelector: React.FC<GameSettingSelectorProps> = ({
         </div>
       </motion.div>
 
-      {/* Number of Rounds */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

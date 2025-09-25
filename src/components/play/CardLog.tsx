@@ -45,7 +45,6 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  // Đổi tab mặc định từ "cards" thành "chat"
   const [activeTab, setActiveTab] = useState<"chat" | "cards">("chat");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
@@ -59,7 +58,6 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
 
     console.log("Setting up chat subscription for room:", roomCode);
 
-    // Load existing messages
     const { data: existingMessages, error } = await supabase
       .from("chat_messages")
       .select("*")
@@ -75,14 +73,12 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
       setTimeout(scrollToBottom, 100);
     }
 
-    // Cleanup previous subscription
     if (chatChannelRef.current) {
       console.log("Cleaning up previous subscription");
       await supabase.removeChannel(chatChannelRef.current);
       chatChannelRef.current = null;
     }
 
-    // Setup realtime subscription
     const channel = supabase.channel(`chat:${roomCode}:${Date.now()}`);
 
     channel
@@ -102,7 +98,7 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
             if (exists) return prev;
 
             const updated = [...prev, newMessage];
-            // Keep only last 50 messages for performance
+
             return updated.slice(-50);
           });
           setTimeout(scrollToBottom, 100);
@@ -174,12 +170,10 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
 
   const getAvatarContent = useCallback((message: ChatMessage) => {
     try {
-      // Check if avatar is a JSON configuration for BigHeads Avatar
       if (message.player_avatar?.startsWith("{")) {
         const config = JSON.parse(message.player_avatar) as AvatarFullConfig;
         return <Avatar className="w-full h-full" {...config} />;
       } else {
-        // Fallback to emoji or text avatar
         return (
           <div className="w-full h-full flex items-center justify-center text-sm">
             {message.player_avatar || "👤"}
@@ -188,7 +182,7 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
       }
     } catch (error) {
       console.error("Error parsing avatar:", error);
-      // Generate a fallback avatar configuration
+
       const fallbackConfig = genConfig();
       return <Avatar className="w-full h-full" {...fallbackConfig} />;
     }
@@ -255,7 +249,6 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
       <div className="flex-1 flex flex-col h-[600px]">
         <AnimatePresence mode="wait">
           {activeTab === "chat" ? (
-            // Enhanced Chat Section - Full width with unique styling
             <motion.div
               key="chat-full"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -283,29 +276,35 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
                 `}</style>
                 <div className="space-y-1">
                   {messages.length === 0 ? (
-                    <motion.div 
+                    <motion.div
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       className="text-center text-white/60 py-8"
                     >
                       <div className="relative">
-                        <FiUsers className="mx-auto mb-3 opacity-40" size={28} />
+                        <FiUsers
+                          className="mx-auto mb-3 opacity-40"
+                          size={28}
+                        />
                         <div className="absolute inset-0 bg-gradient-to-r from-cyan-400/10 to-purple-400/10 rounded-full blur-xl"></div>
                       </div>
-                      <p className="text-base font-medium mb-1">No messages yet</p>
+                      <p className="text-base font-medium mb-1">
+                        No messages yet
+                      </p>
                       <p className="text-xs opacity-70">Start chatting! 🎮</p>
                     </motion.div>
                   ) : (
                     messages.map((message, index) => {
-                      const isOwnMessage = message.player_id === playerData?.player?.id;
+                      const isOwnMessage =
+                        message.player_id === playerData?.player?.id;
                       return (
                         <motion.div
                           key={message.id}
                           initial={{ opacity: 0, x: isOwnMessage ? 20 : -20 }}
                           animate={{ opacity: 1, x: 0 }}
-                          transition={{ 
+                          transition={{
                             duration: 0.2,
-                            ease: "easeOut"
+                            ease: "easeOut",
                           }}
                           className={`flex ${
                             isOwnMessage ? "justify-end" : "justify-start"
@@ -332,7 +331,7 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
                               </div>
                             </div>
                           )}
-                          
+
                           {/* Own message - compact game style */}
                           {isOwnMessage && (
                             <div className="max-w-[70%] flex flex-col items-end">
@@ -347,7 +346,9 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
                                     <span className="text-xs text-blue-200/80">
                                       {formatTimestamp(message.timestamp)}
                                     </span>
-                                    <div className="text-xs text-blue-200/80">✓</div>
+                                    <div className="text-xs text-blue-200/80">
+                                      ✓
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -386,13 +387,15 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
                     disabled={!newMessage.trim() || isLoading}
                     className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 disabled:opacity-50 disabled:hover:from-cyan-500 disabled:hover:to-blue-500 p-2.5 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
                   >
-                    <FiSend size={16} className={isLoading ? "animate-pulse" : ""} />
+                    <FiSend
+                      size={16}
+                      className={isLoading ? "animate-pulse" : ""}
+                    />
                   </motion.button>
                 </div>
               </div>
             </motion.div>
           ) : (
-            // Cards Section with enhanced styling
             <motion.div
               key="cards-full"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -402,12 +405,15 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
             >
               <div className="space-y-4">
                 {recentCards.length === 0 ? (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="text-center text-white/60 py-12"
                   >
-                    <FiZap className="mx-auto mb-4 opacity-40 animate-pulse" size={32} />
+                    <FiZap
+                      className="mx-auto mb-4 opacity-40 animate-pulse"
+                      size={32}
+                    />
                     <p className="text-lg font-medium">No cards used yet</p>
                   </motion.div>
                 ) : (

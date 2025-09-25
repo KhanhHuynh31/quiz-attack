@@ -2,7 +2,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { QRCodeSVG } from "qrcode.react";
 import { FaTimes } from "react-icons/fa";
 
-// QR Code Modal Component with enhanced animations
 export const QRCodeModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;

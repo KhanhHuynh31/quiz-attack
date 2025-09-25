@@ -114,7 +114,7 @@ const QuizGame = () => {
     };
   }, [showLeaderboardAfterAnswer, showCorrectAnswer, gameOver]);
 
-  // Lọc thẻ dựa trên setting của game
+  
   const allowedCards = useMemo(() => {
     if (
       !config?.gameSettings.allowedCards ||
@@ -261,7 +261,7 @@ const QuizGame = () => {
   const handleTimeCardEffect = useCallback(
     async (card: Card, effect: any) => {
       if (!isHost) {
-        // Nếu không phải host, gửi yêu cầu đến host
+        
         if (channelRef.current) {
           await channelRef.current.send({
             type: "broadcast",
@@ -277,7 +277,7 @@ const QuizGame = () => {
         return;
       }
 
-      // Host xử lý thẻ thời gian
+      
       let newTime = timeLeft;
 
       if (typeof effect.value === "string" && effect.value.includes("%")) {
@@ -289,14 +289,14 @@ const QuizGame = () => {
       } else if (typeof effect.value === "number") {
         newTime = Math.max(1, timeLeft + effect.value);
       } else if (effect.value === "100%") {
-        // Reset thời gian về ban đầu
+        
         newTime = config?.gameSettings.timePerQuestion || 30;
       }
 
       setTimeLeft(newTime);
       broadcastTimeUpdate(newTime);
 
-      // Thêm effect để hiển thị
+      
       const effectId = `time-effect-${Date.now()}`;
       const timeEffect: ActiveCardEffect = {
         id: effectId,
@@ -400,7 +400,7 @@ const QuizGame = () => {
 
       const gameConfig: ExtendedGameConfig = {
         roomCode,
-        players: [], // Will be populated from realtime
+        players: [], 
         gameSettings: { ...parsedSettings, selectedQuizPack },
         selectedGameMode,
       };
@@ -582,9 +582,9 @@ const QuizGame = () => {
           }, 3000);
         }
       })
-      // Thêm vào phần .on("broadcast") trong setupRealtimeSubscriptions
+      
       .on("broadcast", { event: "css_card_request" }, async ({ payload }) => {
-        // Chỉ host xử lý yêu cầu thẻ CSS
+        
         if (payload.roomCode === roomCode && isHost) {
           const { cardEffect, playerId, playerName, effectId } = payload;
 
@@ -594,18 +594,18 @@ const QuizGame = () => {
             effect: cardEffect,
             duration: Math.max(1000, timeLeft * 1000),
             startTime: Date.now(),
-            targetPlayer: 0, // Áp dụng cho tất cả
+            targetPlayer: 0, 
             expiresAtQuestionEnd: true,
           };
 
-          // Áp dụng hiệu ứng trên host
+          
           setActiveEffects((prev) => [...prev, cssEffect]);
           setGameModifiers((prev) => ({
             ...prev,
             cssEffects: [...prev.cssEffects, cardEffect.effect],
           }));
 
-          // Broadcast đến tất cả người chơi
+          
           if (channelRef.current) {
             await channelRef.current.send({
               type: "broadcast",
@@ -618,7 +618,7 @@ const QuizGame = () => {
             });
           }
 
-          // Thiết lập timeout để xóa hiệu ứng
+          
           const cssTimeout = setTimeout(() => {
             setActiveEffects((prev) => prev.filter((e) => e.id !== effectId));
             setGameModifiers((prev) => ({
@@ -628,7 +628,7 @@ const QuizGame = () => {
               ),
             }));
 
-            // Broadcast việc xóa hiệu ứng
+            
             if (channelRef.current) {
               channelRef.current.send({
                 type: "broadcast",
@@ -645,7 +645,7 @@ const QuizGame = () => {
         }
       })
       .on("broadcast", { event: "css_effect_applied" }, ({ payload }) => {
-        // Tất cả người chơi nhận hiệu ứng CSS
+        
         if (payload.roomCode === roomCode) {
           const { effect, cssEffectType } = payload;
 
@@ -655,7 +655,7 @@ const QuizGame = () => {
             cssEffects: [...prev.cssEffects, cssEffectType],
           }));
 
-          // Thiết lập timeout để xóa hiệu ứng (đồng bộ với host)
+          
           const cssTimeout = setTimeout(() => {
             setActiveEffects((prev) => prev.filter((e) => e.id !== effect.id));
             setGameModifiers((prev) => ({
@@ -670,7 +670,7 @@ const QuizGame = () => {
         }
       })
       .on("broadcast", { event: "css_effect_removed" }, ({ payload }) => {
-        // Xóa hiệu ứng khi nhận được signal từ host
+        
         if (payload.roomCode === roomCode) {
           const { effectId } = payload;
 
@@ -746,7 +746,7 @@ const QuizGame = () => {
         }
       })
       .on("broadcast", { event: "time_card_request" }, async ({ payload }) => {
-        // Only host should process time card requests
+        
         if (payload.roomCode === roomCode && isHost) {
           const { cardEffect, playerId, playerName } = payload;
 
@@ -772,7 +772,7 @@ const QuizGame = () => {
           setTimeLeft(newTime);
           await broadcastTimeUpdate(newTime);
 
-          // Update database
+          
           await updateGameState({ current_time_left: newTime });
         }
       })
@@ -886,36 +886,36 @@ const QuizGame = () => {
       const { effect } = cardData;
       const currentTime = Date.now();
 
-      // --- TIME EFFECT ---
+      
       const handleTimeEffect = async () => {
-        // Fixed: Pass the correct parameters
-        await handleTimeCardEffect(cardData, effect); // Pass cardData instead of card
+        
+        await handleTimeCardEffect(cardData, effect); 
       };
 
-      // --- CSS EFFECT ---
-      // --- CSS EFFECT ---
+      
+      
       const handleCssEffect = () => {
-        // Tạo effect object
+        
         const cssEffect: ActiveCardEffect = {
           id: effectId,
           type: "css",
           effect,
           duration: Math.max(1000, timeLeft * 1000),
           startTime: currentTime,
-          targetPlayer: 0, // 0 = áp dụng cho tất cả người chơi
+          targetPlayer: 0, 
           expiresAtQuestionEnd: true,
         };
 
-        // Nếu là host, broadcast hiệu ứng đến tất cả người chơi
+        
         if (isHost) {
-          // Áp dụng ngay lập tức trên host
+          
           setActiveEffects((prev) => [...prev, cssEffect]);
           setGameModifiers((prev) => ({
             ...prev,
             cssEffects: [...prev.cssEffects, effect.effect],
           }));
 
-          // Broadcast đến tất cả người chơi khác
+          
           if (channelRef.current) {
             channelRef.current.send({
               type: "broadcast",
@@ -928,7 +928,7 @@ const QuizGame = () => {
             });
           }
         } else {
-          // Nếu không phải host, gửi yêu cầu đến host
+          
           if (channelRef.current) {
             channelRef.current.send({
               type: "broadcast",
@@ -942,10 +942,10 @@ const QuizGame = () => {
               },
             });
           }
-          return; // Dừng lại, chờ host xử lý
+          return; 
         }
 
-        // Thiết lập timeout để xóa hiệu ứng (chỉ host thực hiện)
+        
         const cssTimeout = setTimeout(() => {
           setActiveEffects((prev) => prev.filter((e) => e.id !== effectId));
           setGameModifiers((prev) => ({
@@ -953,7 +953,7 @@ const QuizGame = () => {
             cssEffects: prev.cssEffects.filter((css) => css !== effect.effect),
           }));
 
-          // Broadcast việc xóa hiệu ứng
+          
           if (isHost && channelRef.current) {
             channelRef.current.send({
               type: "broadcast",
@@ -969,10 +969,10 @@ const QuizGame = () => {
         effectCleanupRef.current.push(cssTimeout);
       };
 
-      // --- SCORE EFFECT ---
+      
       const handleScoreEffect = () => {
         if (effect.value === 2) {
-          // Double Points
+          
           const scoreEffect: ActiveCardEffect = {
             id: effectId,
             type: "score",
@@ -985,10 +985,10 @@ const QuizGame = () => {
           setActiveEffects((prev) => [...prev, scoreEffect]);
           setGameModifiers((prev) => ({
             ...prev,
-            scoreMultiplier: effect.value, // 2 for double points
+            scoreMultiplier: effect.value, 
           }));
         } else if (effect.value > 1) {
-          // Multiplier - chỉ áp dụng đến hết câu hỏi hiện tại
+          
           const scoreEffect: ActiveCardEffect = {
             id: effectId,
             type: "score",
@@ -1003,7 +1003,7 @@ const QuizGame = () => {
             scoreMultiplier: effect.value,
           }));
         } else {
-          // Normal bonus
+          
           updatePlayersWithOptimization((prev) =>
             prev.map((player) =>
               player.id === currentPlayerId
@@ -1014,7 +1014,7 @@ const QuizGame = () => {
         }
       };
 
-      // --- ANSWER EFFECT ---
+      
       const handleAnswerEffect = () => {
         if (!currentQuestion) return;
 
@@ -1056,7 +1056,7 @@ const QuizGame = () => {
         }
       };
 
-      // --- DISPATCH ---
+      
       switch (effect.type) {
         case "time":
           handleTimeEffect();
@@ -1084,7 +1084,7 @@ const QuizGame = () => {
     ]
   );
 
-  // Thêm useRef để theo dõi activeEffects mà không gây re-render
+  
   const activeEffectsRef = useRef<ActiveCardEffect[]>([]);
   activeEffectsRef.current = activeEffects;
 
@@ -1092,12 +1092,12 @@ const QuizGame = () => {
     effectCleanupRef.current.forEach((timeout) => clearTimeout(timeout));
     effectCleanupRef.current = [];
 
-    // Chỉ xóa các effect có expiresAtQuestionEnd = true
+    
     setActiveEffects((prev) =>
       prev.filter((effect) => !effect.expiresAtQuestionEnd)
     );
 
-    // Sử dụng activeEffectsRef.current thay vì activeEffects từ closure
+    
     setGameModifiers((prev) => ({
       timeModifier: 0,
       cssEffects: prev.cssEffects.filter(
@@ -1111,7 +1111,7 @@ const QuizGame = () => {
       fakeAnswers: prev.fakeAnswers,
       lockedAnswers: [],
     }));
-  }, []); // Loại bỏ dependency activeEffects
+  }, []); 
   const goToNextQuestion = useCallback(() => {
     if (gameOver || currentQuestionIndex + 1 >= maxQuestions) {
       setGameOver(true);
@@ -1192,13 +1192,13 @@ const QuizGame = () => {
       let earnedScore = 0;
 
       if (isCorrect) {
-        // Áp dụng score multiplier từ active effects
+        
         const activeScoreMultiplier = activeEffectsRef.current
           .filter(
             (effect) => effect.type === "score" && effect.expiresAtQuestionEnd
           )
           .reduce((multiplier, effect) => {
-            // Safely narrow the union: ensure .value exists and is a number before using it
+            
             if (
               "value" in effect.effect &&
               typeof (effect.effect as any).value === "number" &&
@@ -1212,10 +1212,10 @@ const QuizGame = () => {
         earnedScore = Math.round(100 * activeScoreMultiplier);
         setRoundScore(earnedScore);
 
-        // Cập nhật điểm số
+        
         updatePlayerScore(currentPlayerId, earnedScore);
 
-        // Xử lý rút thẻ (nếu có)
+        
         if (config?.selectedGameMode && config.selectedGameMode.id === 1) {
           if (allowedCards.length > 0) {
             const randomCard: Card = {
@@ -1533,10 +1533,10 @@ const QuizGame = () => {
     updateGameState,
   ]);
 
-  // Xóa effect khi hiện kết quả hoặc hiện cập nhật điểm số
+  
   useEffect(() => {
     if (showCorrectAnswer || showLeaderboardAfterAnswer) {
-      // Chỉ clear effects nếu thực sự cần
+      
       const shouldClearEffects = activeEffects.some(
         (effect) => effect.expiresAtQuestionEnd
       );

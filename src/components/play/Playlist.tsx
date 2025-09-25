@@ -22,7 +22,6 @@ const PlayerList: React.FC<PlayerListProps> = ({
 }) => {
   const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
 
-  // Helper function to get avatar content
   const getAvatarContent = (player: Player) => {
     try {
       if (player.avatar?.startsWith("{")) {
@@ -62,7 +61,6 @@ const PlayerList: React.FC<PlayerListProps> = ({
               whileHover={{ scale: 1.02 }}
               className="group flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-green-500/20 to-green-600/20 border border-green-500/30 shadow-md hover:shadow-lg relative overflow-hidden"
             >
-              {/* Player info */}
               <div className="flex items-center space-x-2 min-w-0 flex-1">
                 <div className="relative flex-shrink-0">
                   <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-700">
@@ -87,14 +85,12 @@ const PlayerList: React.FC<PlayerListProps> = ({
                 </div>
               </div>
 
-              {/* Score and cards */}
               <div className="flex items-center space-x-3 ml-2">
                 <div
                   className={`flex flex-col ${
                     player.cards > 0 ? "items-end" : "items-center"
                   }`}
                 >
-                  {/* Điểm */}
                   <div className="flex items-center space-x-1">
                     <span className="text-white text-xs">Điểm:</span>
                     <span className="text-yellow-400 font-bold text-sm">
@@ -102,7 +98,6 @@ const PlayerList: React.FC<PlayerListProps> = ({
                     </span>
                   </div>
 
-                  {/* Thẻ (có animation khi xuất hiện) */}
                   <AnimatePresence>
                     {player.cards > 0 && (
                       <motion.div
@@ -123,7 +118,6 @@ const PlayerList: React.FC<PlayerListProps> = ({
                 </div>
               </div>
 
-              {/* Score update animation */}
               {scoreUpdate && (
                 <motion.span
                   className="text-green-400 font-bold absolute right-3 -top-2 text-xs"

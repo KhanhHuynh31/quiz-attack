@@ -1,5 +1,3 @@
-// types/gameModes.ts
-
 import { GameMode } from "@/types/type";
 
 export const GAME_MODES: GameMode[] = [

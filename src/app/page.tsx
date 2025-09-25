@@ -20,13 +20,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import Avatar, { genConfig, AvatarFullConfig } from "react-nice-avatar";
 import { useRouter } from "next/navigation";
 
-// Import components
 import { Header } from "@/components/home/Header";
 import GameModeSelector from "@/components/Selector/GameModeSelector";
 import QuizPackSelector from "@/components/Selector/QuizPackSelector";
 import AvatarCustomModal from "@/components/home/AvatarCustomModal";
 
-// Import hooks and types
 import { useI18n } from "@/hooks/useI18n";
 import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
 import { GameMode, QuizPack } from "@/types/type";
@@ -38,7 +36,6 @@ import {
 import { supabase } from "@/lib/supabaseClient";
 import AuthModal from "@/components/users/AuthModal";
 
-// Types
 type TabType = "gameMode" | "quizPack";
 
 interface QuizAttackStartProps {
@@ -87,7 +84,6 @@ interface RoomData {
   room_password: string | null;
 }
 
-// Constants
 const ROOM_CODE_LENGTH = 6;
 const CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const AVATAR_HINT_DURATION = 5000;
@@ -97,7 +93,6 @@ const ROOM_SETTINGS_EXPIRY = 24 * 60 * 60 * 1000;
 
 const DEFAULT_AVATAR_CONFIG = genConfig();
 
-// Animation variants
 const animationVariants = {
   mobileToggle: {
     whileHover: { scale: 1.02 },
@@ -145,7 +140,6 @@ const animationVariants = {
   },
 } as const;
 
-// Utility functions
 const generateRandomRoomCode = (): string => {
   let result = "";
   for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
@@ -172,26 +166,23 @@ const isDesktop = (): boolean => {
   );
 };
 
-// Avatar Management Utilities
 const createPlayerData = (
   nickname: string,
   avatarConfig: AvatarFullConfig,
   isHost: boolean,
   authUser?: AuthUser
 ): Player => {
-  // Ưu tiên sử dụng avatar từ authUser nếu có
   if (authUser) {
     return {
       id: authUser.id,
       nickname: authUser.name || nickname,
-      avatar: authUser.avatar, // Sử dụng trực tiếp avatar từ authUser
+      avatar: authUser.avatar,
       isHost,
       isAuthenticated: true,
       email: authUser.email,
     };
   }
 
-  // Đối với guest, sử dụng generated config
   const avatar = JSON.stringify(avatarConfig);
 
   return {
@@ -203,9 +194,7 @@ const createPlayerData = (
   };
 };
 
-const parseAvatarData = (
-  avatar: string
-): { config: AvatarFullConfig } => {
+const parseAvatarData = (avatar: string): { config: AvatarFullConfig } => {
   try {
     if (!avatar) {
       return {
@@ -213,27 +202,22 @@ const parseAvatarData = (
       };
     }
 
-    // Nếu avatar là JSON config
     const config = JSON.parse(avatar);
     return {
       config,
     };
   } catch {
-    // Fallback nếu parse thất bại
     return {
       config: DEFAULT_AVATAR_CONFIG,
     };
   }
 };
 
-// Authentication utilities
 const loadAuthUser = (): AuthUser | null => {
   try {
-    // Try to load from dedicated auth storage
     const authData = loadFromLocalStorage<AuthUser | null>("auth_user", null);
 
     if (authData) {
-      // Parse avatar data
       const { config } = parseAvatarData(authData.avatar);
 
       return {
@@ -242,16 +226,13 @@ const loadAuthUser = (): AuthUser | null => {
       };
     }
 
-    // Fallback to player data storage
     const playerData = loadFromLocalStorage<PlayerData | null>(
       LOCAL_STORAGE_KEYS.PLAYER_DATA,
       null
     );
 
     if (playerData?.authUser) {
-      const { config } = parseAvatarData(
-        playerData.authUser.avatar
-      );
+      const { config } = parseAvatarData(playerData.authUser.avatar);
 
       return {
         ...playerData.authUser,
@@ -268,10 +249,8 @@ const loadAuthUser = (): AuthUser | null => {
 
 const saveAuthUser = (authUser: AuthUser): void => {
   try {
-    // Save to dedicated auth storage
     saveToLocalStorage("auth_user", authUser);
 
-    // Also save to player data for backward compatibility
     const existingPlayerData = loadFromLocalStorage<PlayerData | null>(
       LOCAL_STORAGE_KEYS.PLAYER_DATA,
       null
@@ -329,7 +308,6 @@ const clearAuthUser = (): void => {
   }
 };
 
-// Room settings storage utilities
 const saveRoomSettings = (settings: RoomSettings): void => {
   try {
     const playerData = loadFromLocalStorage<PlayerData>(
@@ -378,7 +356,6 @@ const loadRoomSettings = (): RoomSettings | null => {
   }
 };
 
-// Database Service - Optimized API calls
 class DatabaseService {
   static async checkRoomExists(roomCode: string): Promise<boolean> {
     try {
@@ -530,10 +507,8 @@ class DatabaseService {
 
       if (error || !data) return null;
 
-      // Xử lý avatar data từ database
-      let avatarData = data.avatar_config ;
+      let avatarData = data.avatar_config;
 
-      // Nếu avatar_config tồn tại và là JSON hợp lệ, ưu tiên sử dụng
       if (data.avatar_config) {
         try {
           const config = JSON.parse(data.avatar_config);
@@ -541,18 +516,14 @@ class DatabaseService {
             id: data.id,
             email: data.email ?? "",
             name: data.name ?? "",
-            avatar: data.avatar_config, // Giữ nguyên để backward compatibility
+            avatar: data.avatar_config,
             avatarConfig: config,
           };
         } catch (parseError) {
-          console.warn(
-            "Failed to parse avatar_config",
-            parseError
-          );
+          console.warn("Failed to parse avatar_config", parseError);
         }
       }
 
-      // Parse avatar data thông thường
       const { config } = parseAvatarData(avatarData);
 
       return {
@@ -569,7 +540,6 @@ class DatabaseService {
   }
 }
 
-// Custom hooks
 const useAuthentication = () => {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -771,7 +741,6 @@ const useAvatar = (
     );
   }, []);
 
-  // Parse avatar data từ stored data
   const getInitialAvatarData = () => {
     if (authUser) {
       return {
@@ -798,15 +767,12 @@ const useAvatar = (
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState<boolean>(false);
   const [showAvatarHint, setShowAvatarHint] = useState<boolean>(!authUser);
 
-  // Trong hook useAvatar, sửa effect xử lý authUser
   useEffect(() => {
     if (authUser) {
-      // Đảm bảo sử dụng avatar data từ authUser
       setAvatarConfig(authUser.avatarConfig || DEFAULT_AVATAR_CONFIG);
-      setAvatarKey(prev => prev + 1);
+      setAvatarKey((prev) => prev + 1);
       setShowAvatarHint(false);
 
-      // Debug log để kiểm tra
       console.log("Auth user avatar data:", {
         avatarConfig: authUser.avatarConfig,
         rawAvatar: authUser.avatar,
@@ -824,7 +790,6 @@ const useAvatar = (
     }
   }, [showAvatarHint]);
 
-  // Lưu avatar data vào localStorage cho non-authenticated users
   useEffect(() => {
     if (!authUser) {
       const playerData: PlayerData = {
@@ -846,9 +811,7 @@ const useAvatar = (
   const closeAvatarModal = useCallback(() => setIsAvatarModalOpen(false), []);
 
   const updateAvatarInDatabase = useCallback(
-    async (
-      newAvatarConfig: AvatarFullConfig
-    ) => {
+    async (newAvatarConfig: AvatarFullConfig) => {
       if (!authUser) return;
 
       try {
@@ -868,11 +831,9 @@ const useAvatar = (
   );
 
   const handleAvatarSave = useCallback(
-    async (
-      newAvatarConfig: AvatarFullConfig
-    ) => {
+    async (newAvatarConfig: AvatarFullConfig) => {
       setAvatarConfig(newAvatarConfig);
-      setAvatarKey(prev => prev + 1);
+      setAvatarKey((prev) => prev + 1);
 
       if (authUser) {
         try {
@@ -896,7 +857,6 @@ const useAvatar = (
   };
 };
 
-// Reusable Components
 const AuthSection: React.FC<{
   authUser: AuthUser | null;
   onSignIn: () => void;
@@ -1208,12 +1168,10 @@ const PasswordModal: React.FC<{
   );
 };
 
-// Main Component
 const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
   initialNickname = "",
   initialRoomCode,
 }) => {
-  // Hooks
   const { t } = useI18n();
   const { containerVariants, slideInLeft, slideInRight, scaleIn, fadeUp } =
     useEnhancedAnimations();
@@ -1242,7 +1200,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
   } = useAvatar(authUser, refreshUserData);
   const router = useRouter();
 
-  // Local state
   const [mounted, setMounted] = useState<boolean>(false);
   const [nickname, setNickname] = useState<string>(
     initialNickname || authUser?.name || ""
@@ -1264,7 +1221,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     error: string;
   }>({ isOpen: false, roomCode: "", error: "" });
 
-  // Update nickname when authUser changes
   useEffect(() => {
     if (authUser) {
       setNickname(authUser.name);
@@ -1280,7 +1236,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     }
   }, [authUser, initialNickname]);
 
-  // Load room settings when component mounts
   useEffect(() => {
     const savedSettings = loadRoomSettings();
     if (savedSettings) {
@@ -1293,12 +1248,10 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     }
   }, [initialRoomCode]);
 
-  // Initialize component
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Validation functions
   const validateNickname = useCallback((nickname: string): boolean => {
     return nickname.trim().length > 0;
   }, []);
@@ -1307,7 +1260,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     return code.trim().length === ROOM_CODE_LENGTH;
   }, []);
 
-  // Event handlers
   const handleCopyCode = useCallback(() => {
     copyToClipboard(roomCode);
   }, [copyToClipboard, roomCode]);
@@ -1365,7 +1317,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         authUser ?? undefined
       );
 
-      // Save player data
       const playerData: PlayerData = {
         player,
         avatarConfig,
@@ -1385,7 +1336,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         isPasswordProtected && roomPassword ? roomPassword : null
       );
 
-      // Save room settings
       if (isPasswordProtected && roomPassword) {
         saveRoomSettings({
           roomCode,
@@ -1433,7 +1383,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         authUser ?? undefined
       );
 
-      // Save player data
       const playerData: PlayerData = {
         player,
         avatarConfig,
@@ -1447,7 +1396,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
 
       await DatabaseService.joinRoom(roomCodeToJoin, player);
 
-      // Save room settings if password was provided
       if (password) {
         saveRoomSettings({
           roomCode: roomCodeToJoin,
@@ -1484,7 +1432,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
       return;
     }
 
-    // Check for saved room settings first
     const savedSettings = loadRoomSettings();
     if (savedSettings?.roomCode === joinCode && savedSettings.password) {
       const isValid = await DatabaseService.verifyRoomPassword(
@@ -1497,14 +1444,12 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
       }
     }
 
-    // Check if room requires password
     const roomPassword = await DatabaseService.getRoomPassword(joinCode);
     if (roomPassword) {
       setPasswordModal({ isOpen: true, roomCode: joinCode, error: "" });
       return;
     }
 
-    // No password required
     await proceedWithJoin(joinCode);
   }, [authUser, nickname, joinCode, validateNickname, validateRoomCode]);
 
@@ -1528,7 +1473,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     }
   };
 
-  // Loading state
   if (!mounted || isCheckingAuth) {
     return (
       <div className="h-screen w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">

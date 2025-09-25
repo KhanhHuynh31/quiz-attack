@@ -7,7 +7,6 @@ import { useI18n } from "@/hooks/useI18n";
 import { GameMode } from "@/types/type";
 import { GAME_MODES } from "@/data/modeData";
 
-// Types
 interface GameModeStyle {
   gradient: string;
   icon: JSX.Element;
@@ -22,7 +21,6 @@ interface GameModeItemProps {
   index: number;
 }
 
-// Enhanced Game Mode Item Component
 const GameModeItem: React.FC<GameModeItemProps> = ({
   mode,
   style,
@@ -53,7 +51,6 @@ const GameModeItem: React.FC<GameModeItemProps> = ({
           : "bg-gradient-to-br from-white/10 to-white/5 border-white/20 hover:border-white/40"
       }`}
     >
-      {/* Animated background effect */}
       <motion.div
         className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
         initial={{ x: "-100%" }}
@@ -62,57 +59,55 @@ const GameModeItem: React.FC<GameModeItemProps> = ({
       />
 
       <div className="relative z-10 flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-3 w-full">
-  <motion.div
-    animate={
-      isHovered
-        ? {
-            scale: 1.2,
-            rotate: [0, -10, 10, 0],
+        <motion.div
+          animate={
+            isHovered
+              ? {
+                  scale: 1.2,
+                  rotate: [0, -10, 10, 0],
+                }
+              : { scale: 1, rotate: 0 }
           }
-        : { scale: 1, rotate: 0 }
-    }
-    transition={{ duration: 0.4 }}
-    className="flex-shrink-0 p-2 sm:p-3 rounded-lg bg-white/10"
-  >
-    {style.icon}
-  </motion.div>
+          transition={{ duration: 0.4 }}
+          className="flex-shrink-0 p-2 sm:p-3 rounded-lg bg-white/10"
+        >
+          {style.icon}
+        </motion.div>
 
-  <div className="flex-1 min-w-0">
-    <motion.h4
-      animate={isHovered ? { x: 3 } : { x: 0 }}
-      className="font-bold text-base sm:text-lg truncate"
-    >
-      {mode.name}
-    </motion.h4>
-    <motion.p
-      animate={isHovered ? { x: 3 } : { x: 0 }}
-      transition={{ delay: 0.05 }}
-      className="text-xs sm:text-sm text-white/70 leading-snug sm:leading-relaxed"
-    >
-      {mode.description}
-    </motion.p>
-  </div>
+        <div className="flex-1 min-w-0">
+          <motion.h4
+            animate={isHovered ? { x: 3 } : { x: 0 }}
+            className="font-bold text-base sm:text-lg truncate"
+          >
+            {mode.name}
+          </motion.h4>
+          <motion.p
+            animate={isHovered ? { x: 3 } : { x: 0 }}
+            transition={{ delay: 0.05 }}
+            className="text-xs sm:text-sm text-white/70 leading-snug sm:leading-relaxed"
+          >
+            {mode.description}
+          </motion.p>
+        </div>
 
-  <AnimatePresence>
-    {isSelected && (
-      <motion.div
-        initial={{ scale: 0, rotate: -180 }}
-        animate={{ scale: 1, rotate: 0 }}
-        exit={{ scale: 0, rotate: 180 }}
-        transition={{ type: "spring", stiffness: 300 }}
-        className="flex-shrink-0 self-start sm:self-center"
-      >
-        <FaCheck className="text-white text-lg sm:text-xl drop-shadow-lg" />
-      </motion.div>
-    )}
-  </AnimatePresence>
-</div>
-
+        <AnimatePresence>
+          {isSelected && (
+            <motion.div
+              initial={{ scale: 0, rotate: -180 }}
+              animate={{ scale: 1, rotate: 0 }}
+              exit={{ scale: 0, rotate: 180 }}
+              transition={{ type: "spring", stiffness: 300 }}
+              className="flex-shrink-0 self-start sm:self-center"
+            >
+              <FaCheck className="text-white text-lg sm:text-xl drop-shadow-lg" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </motion.div>
   );
 };
 
-// Main Game Mode Selector Component
 interface GameModeSelectorProps {
   selectedMode: GameMode | null;
   onModeSelect: (mode: GameMode) => void;
@@ -126,7 +121,6 @@ export const GameModeSelector: React.FC<GameModeSelectorProps> = ({
 }) => {
   const { t } = useI18n();
 
-  // Style configuration mapped by mode key
   const MODE_STYLES: Record<string, GameModeStyle> = {
     classic: {
       icon: <FaQuestionCircle className="text-2xl text-blue-400" />,
@@ -142,7 +136,6 @@ export const GameModeSelector: React.FC<GameModeSelectorProps> = ({
     },
   };
 
-  // Auto-select first mode if none is selected
   useEffect(() => {
     if (!selectedMode && GAME_MODES.length > 0) {
       onModeSelect(GAME_MODES[0]);

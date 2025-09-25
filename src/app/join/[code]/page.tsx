@@ -12,11 +12,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import Avatar, { genConfig, AvatarFullConfig } from "react-nice-avatar";
 import { useRouter, useParams } from "next/navigation";
 
-// Import components
+
 import { Header } from "@/components/home/Header";
 import AvatarCustomModal from "@/components/home/AvatarCustomModal";
 
-// Import hooks and types
+
 import { useI18n } from "@/hooks/useI18n";
 import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
 import {
@@ -26,7 +26,7 @@ import {
 } from "@/hooks/useLocalStorage";
 import { supabase } from "@/lib/supabaseClient";
 
-// Types
+
 interface Player {
   id: string;
   nickname: string;
@@ -57,13 +57,13 @@ interface RoomData {
   room_password: string | null;
 }
 
-// Constants
+
 const AVATAR_HINT_DURATION = 5000;
 const DEFAULT_AVATAR_CONFIG = genConfig();
-const ROOM_CHECK_INTERVAL = 30000; // Check room status every 30 seconds
-const ROOM_SETTINGS_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+const ROOM_CHECK_INTERVAL = 30000; 
+const ROOM_SETTINGS_EXPIRY = 24 * 60 * 60 * 1000; 
 
-// Animation variants
+
 const animationVariants = {
   avatarContainer: {
     whileHover: { scale: 1.1 },
@@ -78,7 +78,7 @@ const animationVariants = {
   },
 } as const;
 
-// Utility functions
+
 const generateUniqueId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
 };
@@ -96,7 +96,7 @@ const createPlayerData = (
   };
 };
 
-// Database operations
+
 class DatabaseService {
   static async getRoomData(roomCode: string): Promise<RoomData | null> {
     try {
@@ -108,7 +108,7 @@ class DatabaseService {
 
       if (error) {
         if (error.code === "PGRST116") {
-          // No rows found - room doesn't exist
+          
           console.error("Room does not exist:", roomCode);
           return null;
         }
@@ -148,7 +148,7 @@ class DatabaseService {
 
   static async joinRoom(roomCode: string, player: Player): Promise<void> {
     try {
-      // First check if room exists
+      
       const { data: roomData, error: fetchError } = await supabase
         .from("room")
         .select("player_list")
@@ -159,7 +159,7 @@ class DatabaseService {
         throw new Error("Room not found");
       }
 
-      // Parse existing players
+      
       let currentPlayers: Player[] = [];
       try {
         currentPlayers = roomData.player_list
@@ -170,14 +170,14 @@ class DatabaseService {
         currentPlayers = [];
       }
 
-      // Check if player already exists in the room
+      
       const playerExists = currentPlayers.some((p) => p.id === player.id);
       if (playerExists) {
         console.error("Player already in room, proceeding...");
         return;
       }
 
-      // Add player to the existing player list
+      
       const updatedPlayers = [...currentPlayers, player];
 
       const { error: updateError } = await supabase
@@ -198,7 +198,7 @@ class DatabaseService {
   }
 }
 
-// Room settings utilities
+
 const loadRoomSettings = (): RoomSettings | null => {
   try {
     const playerData = loadFromLocalStorage<PlayerData | null>(
@@ -212,10 +212,10 @@ const loadRoomSettings = (): RoomSettings | null => {
 
     const roomSettings = playerData.roomSettings;
 
-    // Check if settings are expired (24 hours)
+    
     const now = Date.now();
     if (roomSettings.createdAt + ROOM_SETTINGS_EXPIRY < now) {
-      // Remove expired settings
+      
       const updatedPlayerData = { ...playerData, roomSettings: undefined };
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, updatedPlayerData);
       return null;
@@ -250,9 +250,9 @@ const saveRoomSettings = (settings: RoomSettings): void => {
   }
 };
 
-// Custom hooks
+
 const useAvatar = () => {
-  // Load player data from localStorage
+  
   const savedPlayerData = loadFromLocalStorage<PlayerData | null>(
     LOCAL_STORAGE_KEYS.PLAYER_DATA,
     null
@@ -273,7 +273,7 @@ const useAvatar = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Save avatar config and custom image to player data
+  
   useEffect(() => {
     const playerData: PlayerData = {
       player: savedPlayerData?.player || {
@@ -283,7 +283,7 @@ const useAvatar = () => {
         isHost: false,
       },
       avatarConfig,
-      roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
+      roomSettings: savedPlayerData?.roomSettings, 
     };
     saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
   }, [avatarConfig, savedPlayerData]);
@@ -306,7 +306,7 @@ const useAvatar = () => {
   };
 };
 
-// Component parts
+
 const UserProfile: React.FC<{
   nickname: string;
   onNicknameChange: (nickname: string) => void;
@@ -391,9 +391,9 @@ const UserProfile: React.FC<{
   </div>
 );
 
-// Main Component
+
 const JoinRoomPage: React.FC = () => {
-  // Hooks
+  
   const { t } = useI18n();
   const { containerVariants, slideInLeft, fadeUp } = useEnhancedAnimations();
   const {
@@ -408,13 +408,13 @@ const JoinRoomPage: React.FC = () => {
   const params = useParams();
   const roomCode = params.code as string;
 
-  // Load player data from localStorage
+  
   const savedPlayerData = loadFromLocalStorage<PlayerData | null>(
     LOCAL_STORAGE_KEYS.PLAYER_DATA,
     null
   );
 
-  // Local state
+  
   const [mounted, setMounted] = useState<boolean>(false);
   const [nickname, setNickname] = useState<string>(
     savedPlayerData?.player.nickname || ""
@@ -427,7 +427,7 @@ const JoinRoomPage: React.FC = () => {
   const [lastRoomCheck, setLastRoomCheck] = useState<number>(0);
   const [hasSavedPassword, setHasSavedPassword] = useState<boolean>(false);
 
-  // Load room data when component mounts
+  
   useEffect(() => {
     const fetchRoomData = async () => {
       if (!roomCode) {
@@ -446,7 +446,7 @@ const JoinRoomPage: React.FC = () => {
 
         setRoomData(data);
 
-        // Check if we have saved room settings for this room
+        
         const savedSettings = loadRoomSettings();
         if (
           savedSettings &&
@@ -469,7 +469,7 @@ const JoinRoomPage: React.FC = () => {
     fetchRoomData();
   }, [roomCode]);
 
-  // Periodically check if room still exists
+  
   useEffect(() => {
     if (!roomData) return;
 
@@ -490,32 +490,32 @@ const JoinRoomPage: React.FC = () => {
     return () => clearInterval(interval);
   }, [roomData, roomCode]);
 
-  // Save player data to localStorage whenever it changes
+  
   useEffect(() => {
     const playerData: PlayerData = {
       player: {
         id: savedPlayerData?.player.id || generateUniqueId(),
         nickname,
         avatar: JSON.stringify(avatarConfig),
-        isHost: false, // Always false when joining a room
+        isHost: false, 
       },
       avatarConfig,
-      roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
+      roomSettings: savedPlayerData?.roomSettings, 
     };
     saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
   }, [nickname, avatarConfig, savedPlayerData]);
 
-  // Initialize component
+  
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Validation functions
+  
   const validateNickname = useCallback((nickname: string): boolean => {
     return nickname.trim().length > 0;
   }, []);
 
-  // Event handlers
+  
   const handleNicknameChange = useCallback((newNickname: string) => {
     setNickname(newNickname);
   }, []);
@@ -530,7 +530,7 @@ const JoinRoomPage: React.FC = () => {
     setError("");
 
     try {
-      // Revalidate room existence before joining
+      
       const data = await DatabaseService.getRoomData(roomCode);
       if (!data) {
         setError("Room no longer exists");
@@ -538,7 +538,7 @@ const JoinRoomPage: React.FC = () => {
         return;
       }
 
-      // Check if room requires password
+      
       if (data.room_password) {
         const isValid = await DatabaseService.verifyRoomPassword(
           roomCode,
@@ -554,18 +554,18 @@ const JoinRoomPage: React.FC = () => {
       const player = createPlayerData(
         nickname,
         avatarConfig,
-        false // isHost = false when joining room
+        false 
       );
 
-      // Update player data with guest status
+      
       const playerData: PlayerData = {
         player,
         avatarConfig,
-        roomSettings: savedPlayerData?.roomSettings, // Preserve existing room settings
+        roomSettings: savedPlayerData?.roomSettings, 
       };
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
 
-      // Save room settings if password was provided and not empty
+      
       if (roomPassword && roomPassword.trim() !== "") {
         const roomSettings: RoomSettings = {
           roomCode,
@@ -599,7 +599,7 @@ const JoinRoomPage: React.FC = () => {
     savedPlayerData,
   ]);
 
-  // Loading state
+  
   if (!mounted || isLoading) {
     return (
       <div className="h-screen w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
@@ -617,7 +617,7 @@ const JoinRoomPage: React.FC = () => {
     );
   }
 
-  // Error state
+  
   if (error && !roomData) {
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
