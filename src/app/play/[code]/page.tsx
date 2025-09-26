@@ -42,7 +42,7 @@ import PauseOverlay from "@/components/play/PauseOverPlay";
 import GameOver from "@/components/play/GameOver";
 import { supabase } from "@/lib/supabaseClient";
 import { loadPlayerData } from "@/hooks/useLocalStorage";
-import CardLogAndChat from "@/components/play/CardLog";
+import CardLogAndChat from "@/components/play/CardLogAndChat";
 
 type PlayerPresence = Player & { presence_ref: string };
 
@@ -1772,7 +1772,7 @@ const QuizGame = () => {
   const modifiedQuestion = getModifiedQuestion();
 
   return (
-    <>
+    <div className="flex flex-1 lg:h-screen">
       <Toaster
         position="top-center"
         toastOptions={{
@@ -1784,7 +1784,7 @@ const QuizGame = () => {
         }}
       />
       <motion.div
-        className="relative min-h-screen w-full font-sans flex flex-col p-4 overflow-auto lg:overflow-hidden"
+        className="relative min-h-screen w-full font-sans flex flex-1 flex-col p-4"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5 }}
@@ -1799,7 +1799,7 @@ const QuizGame = () => {
             : undefined,
         }}
       >
-        <div className="max-w-6xl mx-auto flex-1 flex flex-col w-full min-h-0">
+        <div className="max-w-7xl mx-auto flex-1 flex flex-col w-full min-h-0 ">
           <Timer
             timeLeft={timeLeft}
             currentQuestionIndex={currentQuestionIndex}
@@ -1850,13 +1850,20 @@ const QuizGame = () => {
                 allPlayersAnswered={allPlayersAnswered}
               />
             </div>
-            <CardLogAndChat
-              usedCardsLog={usedCardsLog}
-              getCardInfo={getCardInfo}
-              showCardInfo={showCardInfo}
-              roomCode={roomCode}
-              playerData={playerData}
-            />
+
+            <div
+              className=" rounded-3xl border border-white/10 
+                  bg-gradient-to-b from-white/10 to-white/5 flex flex-1 "
+            >
+              <CardLogAndChat
+                usedCardsLog={usedCardsLog}
+                getCardInfo={getCardInfo}
+                showCardInfo={showCardInfo}
+                roomCode={roomCode}
+                playerData={playerData}
+                isLobby={true}
+              />
+            </div>
           </motion.div>
         </div>
 
@@ -1880,7 +1887,7 @@ const QuizGame = () => {
           togglePause={togglePause}
         />
       </motion.div>
-    </>
+    </div>
   );
 };
 

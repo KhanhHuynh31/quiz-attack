@@ -32,6 +32,7 @@ import GameModeSelector from "@/components/Selector/GameModeSelector";
 import QuizPackSelector from "@/components/Selector/QuizPackSelector";
 import PlayerCard from "@/components/PlayerCard";
 import { LanguageSelector } from "@/components/Selector/LanguageSelector";
+import CardLogAndChat from "@/components/play/CardLogAndChat";
 
 import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
 import { useI18n } from "@/hooks/useI18n";
@@ -45,12 +46,15 @@ import {
   QuizAttackLobbyProps,
   QuizPack,
   TabType,
+  CardUsage,
+  Card,
 } from "@/types/type";
 import { lobbyTranslations } from "@/i18n/translations";
 import { DEFAULT_GAME_SETTINGS } from "@/data/gameConfig";
 import { DEFAULT_QUIZ_PACKS } from "@/data/quizData";
 import { GAME_MODES } from "@/data/modeData";
 import { supabase } from "@/lib/supabaseClient";
+import { powerCards } from "@/data/cardData";
 
 const TABS = [
   { key: "mode" as const, icon: FaGamepad, labelKey: "gameMode" as const },
@@ -80,7 +84,7 @@ const animations = {
       duration: 0.2,
     },
   },
-  playersExpand: {
+  mobileSection: {
     initial: { height: 0, opacity: 0 },
     animate: { height: "auto", opacity: 1 },
     exit: { height: 0, opacity: 0 },
@@ -352,6 +356,18 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   const [passwordValidated, setPasswordValidated] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
 
+  // Thêm ref để fix scroll issue
+  const tabContentRef = useRef<HTMLDivElement>(null);
+  const mainContentRef = useRef<HTMLDivElement>(null);
+
+  const [usedCardsLog, setUsedCardsLog] = useState<CardUsage[]>([]);
+
+  // Thay đổi state management cho mobile sections
+  const [mobileSections, setMobileSections] = useState({
+    players: false,
+    chat: false,
+  });
+
   const isPlayerVerified = useMemo(() => {
     return (
       dataLoaded &&
@@ -402,7 +418,6 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>("mode");
   const [isMobileDropdownOpen, setIsMobileDropdownOpen] = useState(false);
   const [isTabChanging, setIsTabChanging] = useState(false);
-  const [showPlayersOnMobile, setShowPlayersOnMobile] = useState(false);
 
   const t = useMemo(
     () =>
@@ -420,6 +435,30 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
   const isQuizMode = useMemo(() => {
     return selectedGameMode?.id === 2;
   }, [selectedGameMode]);
+
+  // Hàm toggle cho mobile sections
+  const toggleMobileSection = useCallback((section: "players" | "chat") => {
+    setMobileSections((prev) => ({
+      ...prev,
+      [section]: !prev[section],
+    }));
+  }, []);
+
+  // Hàm đóng tất cả mobile sections
+  const closeAllMobileSections = useCallback(() => {
+    setMobileSections({
+      players: false,
+      chat: false,
+    });
+  }, []);
+
+  const getCardInfo = useCallback((name: string) => {
+    return powerCards.find((card) => card.name === name);
+  }, []);
+
+  const showCardInfo = useCallback((cardTitle: string, description: string) => {
+    console.log(`Card: ${cardTitle}, Description: ${description}`);
+  }, []);
 
   useEffect(() => {
     const data = loadPlayerData();
@@ -463,13 +502,31 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     const handleResize = () => {
       if (window.innerWidth >= 1024) {
         setIsMobileDropdownOpen(false);
-        setShowPlayersOnMobile(false);
+        closeAllMobileSections();
       }
     };
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [closeAllMobileSections]);
+
+  // Fix scroll issue khi chuyển tab
+  useEffect(() => {
+    if (tabContentRef.current && !isTabChanging) {
+      // Scroll to top của tab content
+      tabContentRef.current.scrollTo(0, 0);
+
+      // Scroll to top của main content trên mobile
+      if (mainContentRef.current && window.innerWidth < 1024) {
+        const tabElement = mainContentRef.current.querySelector(
+          ".tab-content-section"
+        );
+        if (tabElement) {
+          tabElement.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+    }
+  }, [activeTab, isTabChanging]);
 
   useEffect(() => {
     if (isHost && dataLoaded && isPlayerVerified) {
@@ -623,7 +680,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       setTimeout(() => {
         setActiveTab(newTab);
         setIsTabChanging(false);
-      }, 50);
+      }, 150); // Tăng thời gian animation để tránh scroll jump
     },
     [activeTab]
   );
@@ -892,7 +949,8 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           <motion.div
             key={`tab-${activeTab}`}
             {...animations.tabContent}
-            className="h-full overflow-y-auto overflow-x-hidden space-y-0 sm:space-y-6 p-0 sm:p-3"
+            className="h-full overflow-y-auto overflow-x-hidden space-y-0 sm:space-y-6 p-0 sm:p-3 tab-content-section"
+            ref={tabContentRef}
           >
             <div className={!isHost ? "pointer-events-none opacity-60" : ""}>
               {config.component}
@@ -909,7 +967,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       initial="hidden"
       animate="visible"
       className={`bg-white/10 backdrop-blur-lg rounded-2xl p-6 flex flex-col h-full border border-white/20 shadow-xl ${
-        showPlayersOnMobile ? "block" : "hidden lg:block"
+        mobileSections.players ? "block" : "hidden lg:block"
       }`}
     >
       <motion.div
@@ -931,7 +989,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
         </div>
         <button
           className="lg:hidden text-white/70 hover:text-white"
-          onClick={() => setShowPlayersOnMobile(false)}
+          onClick={() => toggleMobileSection("players")}
         >
           <FaChevronLeft />
         </button>
@@ -975,6 +1033,26 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
           </AnimatePresence>
         )}
       </motion.div>
+    </motion.section>
+  );
+
+  const renderChatSection = () => (
+    <motion.section
+      variants={slideInRight}
+      initial="hidden"
+      animate="visible"
+      className={` flex-col h-full bg-white/10 backdrop-blur-lg rounded-2xl border border-white/20 shadow-xl  ${
+        mobileSections.chat ? "flex" : "hidden lg:flex"
+      }`}
+    >
+      <CardLogAndChat
+        usedCardsLog={usedCardsLog}
+        getCardInfo={getCardInfo}
+        showCardInfo={showCardInfo}
+        roomCode={roomCode}
+        playerData={playerData}
+        isLobby={true}
+      />
     </motion.section>
   );
 
@@ -1099,46 +1177,75 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
         </div>
       </motion.header>
 
-      <main className="flex-1 px-2 pb-2 sm:px-4 sm:pb-4 md:px-6 md:pb-6 overflow-y-auto lg:overflow-hidden flex flex-col">
-        <AnimatePresence>
-          {!showPlayersOnMobile && (
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="block lg:hidden mb-4"
-            >
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setShowPlayersOnMobile(true)}
-                className="flex items-center justify-between w-full p-4 bg-white/15 rounded-xl border border-white/20"
-              >
-                <div className="flex items-center space-x-3">
-                  <FaUsers className="text-blue-400" />
-                  <span className="font-medium">
-                    {t.players} ({playerCount})
-                  </span>
-                </div>
-                <FaChevronUp />
-              </motion.button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+      <main
+        ref={mainContentRef}
+        className="flex-1 px-2 pb-2 sm:px-4 sm:pb-4 md:px-6 md:pb-6 overflow-y-auto lg:overflow-hidden flex flex-col"
+      >
+        {/* Mobile Section Toggles - Luôn hiển thị */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="block lg:hidden mb-4 space-y-4"
+        >
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => toggleMobileSection("players")}
+            className="flex items-center justify-between w-full p-4 bg-white/15 rounded-xl border border-white/20"
+          >
+            <div className="flex items-center space-x-3">
+              <FaUsers className="text-blue-400" />
+              <span className="font-medium">
+                {t.players} ({playerCount})
+              </span>
+            </div>
+            {mobileSections.players ? <FaChevronUp /> : <FaChevronDown />}
+          </motion.button>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full max-w-8xl mx-auto w-full flex-1 min-h-0 lg:overflow-hidden">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => toggleMobileSection("chat")}
+            className="flex items-center justify-between w-full p-4 bg-white/15 rounded-xl border border-white/20"
+          >
+            <div className="flex items-center space-x-3">
+              <FaUsers className="text-green-400" />
+              <span className="font-medium">Chat & Card Log</span>
+            </div>
+            {mobileSections.chat ? <FaChevronUp /> : <FaChevronDown />}
+          </motion.button>
+        </motion.div>
+
+        {/* Mobile Sections - Có thể mở cả hai cùng lúc */}
+        <div className="flex flex-col lg:hidden space-y-4 mb-4">
           <AnimatePresence>
-            {showPlayersOnMobile && (
+            {mobileSections.players && (
               <motion.div
-                {...animations.playersExpand}
-                className="block lg:hidden order-first"
+                {...animations.mobileSection}
+                className="overflow-hidden"
               >
                 {renderPlayersList()}
               </motion.div>
             )}
           </AnimatePresence>
 
-          <div className="hidden lg:block">{renderPlayersList()}</div>
+          <AnimatePresence>
+            {mobileSections.chat && (
+              <motion.div
+                {...animations.mobileSection}
+                className="overflow-hidden"
+              >
+                {renderChatSection()}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Desktop Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full max-w-8xl mx-auto w-full flex-1 min-h-0 lg:overflow-hidden">
+          <div className="hidden lg:block lg:col-span-1">
+            {renderPlayersList()}
+          </div>
 
           <motion.section
             variants={slideInRight}
@@ -1159,6 +1266,10 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             {renderTabs()}
             {renderTabContent()}
           </motion.section>
+
+          <div className="hidden lg:block lg:col-span-1 overflow-auto">
+            {renderChatSection()}
+          </div>
         </div>
       </main>
 

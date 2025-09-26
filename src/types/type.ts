@@ -63,7 +63,6 @@ export interface QuizPack {
   category: string;
   questionCount: number;
   author: string;
-
   isHidden?: boolean;
 }
 
