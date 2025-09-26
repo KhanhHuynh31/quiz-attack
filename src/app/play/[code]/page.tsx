@@ -1861,7 +1861,7 @@ const QuizGame = () => {
                 showCardInfo={showCardInfo}
                 roomCode={roomCode}
                 playerData={playerData}
-                isLobby={true}
+                isLobby={false}
               />
             </div>
           </motion.div>
