@@ -19,10 +19,11 @@ import {
   FiHeart,
   FiChevronDown,
   FiCheck,
+  FiHome,
+  FiLogIn,
 } from "react-icons/fi";
 import toast, { Toaster } from "react-hot-toast";
 import { supabase } from "@/lib/supabaseClient";
-import { Header } from "@/components/home/Header";
 import { useI18n } from "@/hooks/useI18n";
 import AuthModal from "@/components/users/AuthModal";
 import {
@@ -431,6 +432,7 @@ const QuizPacksCRUD: React.FC = () => {
       setEditingQuestion(null);
     } else {
       setViewingQuestions(packId);
+      setQuestions([]); // Reset questions trước khi fetch mới
       await fetchQuestions(packId);
     }
   };
@@ -616,10 +618,61 @@ const QuizPacksCRUD: React.FC = () => {
 
   return (
     <div className="min-h-screen relative overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4">
-        <Header />
-      </div>
+      {/* Custom Header */}
+      <header className="flex items-center justify-between p-4 bg-gradient-to-r from-indigo-900 to-purple-900 shadow-lg">
+        {/* Home Button - Left */}
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => router.push('/')}
+          className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all duration-300"
+        >
+          <FiHome className="w-5 h-5" />
+          <span className="hidden sm:block">Trang chủ</span>
+        </motion.button>
+
+        {/* Logo - Center */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-2"
+        >
+          <FiBookOpen className="w-8 h-8 text-white" />
+          <span className="text-2xl font-bold text-white">QuizAttack</span>
+        </motion.div>
+
+        {/* Auth Button - Right */}
+        <div className="flex items-center gap-4">
+          {authUser ? (
+            <div className="flex items-center gap-3">
+              <img
+                src={authUser.avatar || '/default-avatar.png'}
+                alt="Avatar"
+                className="w-8 h-8 rounded-full"
+              />
+              <span className="text-white hidden md:block">{authUser.name}</span>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleSignOut}
+                className="px-4 py-2 bg-red-500/20 text-red-300 rounded-xl hover:bg-red-500/30 transition-all duration-300 border border-red-500/30"
+              >
+                Đăng xuất
+              </motion.button>
+            </div>
+          ) : (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={openAuthModal}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-xl hover:from-pink-600 hover:to-purple-700 transition-all duration-300"
+            >
+              <FiLogIn className="w-5 h-5" />
+              <span className="hidden sm:block">Đăng nhập</span>
+            </motion.button>
+          )}
+        </div>
+      </header>
 
       {/* Auth Modal */}
       <AuthModal
@@ -1050,7 +1103,8 @@ const QuizPacksCRUD: React.FC = () => {
             <div className="p-6">
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-3xl font-bold text-white">
-                  Câu hỏi trong quiz
+                  Câu hỏi trong quiz:{" "}
+                  {quizPacks.find((p) => p.id === viewingQuestions)?.name}
                 </h2>
                 <motion.button
                   whileHover={{ scale: 1.1 }}
