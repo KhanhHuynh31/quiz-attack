@@ -1799,7 +1799,7 @@ const QuizGame = () => {
             : undefined,
         }}
       >
-        <div className="max-w-7xl mx-auto flex-1 flex flex-col w-full min-h-0 ">
+        <div className="max-w-8xl mx-auto flex-1 flex flex-col w-full min-h-0 ">
           <Timer
             timeLeft={timeLeft}
             currentQuestionIndex={currentQuestionIndex}

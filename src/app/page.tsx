@@ -1047,14 +1047,16 @@ const UserProfile: React.FC<{
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -10 }}
               transition={{ duration: 0.5 }}
-              className="absolute bottom-3 -left-20 text-white text-sx py-1 px-2 rounded-lg whitespace-nowrap"
+              className={`absolute bottom-3 ${
+                isDesktop() ? "-left-18" : "-left-6"
+              } text-white text-xs py-1 px-2 rounded-lg whitespace-nowrap`}
             >
               <motion.div
                 animate={{ x: [0, 5, 0] }}
                 transition={{ duration: 1, repeat: Infinity }}
               >
                 <div className="flex items-center gap-1">
-                  <span>Change</span>
+                  {isDesktop() && <span>Change</span>}
                   <FaChevronRight className="text-xs" />
                 </div>
               </motion.div>

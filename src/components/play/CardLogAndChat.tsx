@@ -51,9 +51,6 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
 
   const setupChatSubscription = useCallback(async () => {
     if (!roomCode || !playerData?.player?.id) return;
@@ -72,7 +69,6 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
     } else if (existingMessages) {
       console.log("Loaded existing messages:", existingMessages.length);
       setMessages(existingMessages);
-      setTimeout(scrollToBottom, 100);
     }
 
     if (chatChannelRef.current) {
@@ -102,7 +98,6 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
             const updated = [...prev, newMessage];
             return updated.slice(-50);
           });
-          setTimeout(scrollToBottom, 100);
         }
       )
       .subscribe((status) => {
@@ -118,7 +113,7 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
         chatChannelRef.current = null;
       }
     };
-  }, [roomCode, playerData?.player?.id, scrollToBottom]);
+  }, [roomCode, playerData?.player?.id]);
 
   const sendMessage = useCallback(async () => {
     if (!newMessage.trim() || !playerData?.player || isLoading) return;

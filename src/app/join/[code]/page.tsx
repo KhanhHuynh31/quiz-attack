@@ -12,10 +12,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import Avatar, { genConfig, AvatarFullConfig } from "react-nice-avatar";
 import { useRouter, useParams } from "next/navigation";
 
-
 import { Header } from "@/components/home/Header";
 import AvatarCustomModal from "@/components/home/AvatarCustomModal";
-
 
 import { useI18n } from "@/hooks/useI18n";
 import { useEnhancedAnimations } from "@/hooks/useEnhancedAnimations";
@@ -25,7 +23,6 @@ import {
   saveToLocalStorage,
 } from "@/hooks/useLocalStorage";
 import { supabase } from "@/lib/supabaseClient";
-
 
 interface Player {
   id: string;
@@ -57,12 +54,11 @@ interface RoomData {
   room_password: string | null;
 }
 
-
 const AVATAR_HINT_DURATION = 5000;
 const DEFAULT_AVATAR_CONFIG = genConfig();
-const ROOM_CHECK_INTERVAL = 30000; 
-const ROOM_SETTINGS_EXPIRY = 24 * 60 * 60 * 1000; 
-
+const ROOM_CHECK_INTERVAL = 30000;
+const ROOM_SETTINGS_EXPIRY = 24 * 60 * 60 * 1000;
+const DESKTOP_BREAKPOINT = 1024;
 
 const animationVariants = {
   avatarContainer: {
@@ -78,6 +74,11 @@ const animationVariants = {
   },
 } as const;
 
+const isDesktop = (): boolean => {
+  return (
+    typeof window !== "undefined" && window.innerWidth >= DESKTOP_BREAKPOINT
+  );
+};
 
 const generateUniqueId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -96,7 +97,6 @@ const createPlayerData = (
   };
 };
 
-
 class DatabaseService {
   static async getRoomData(roomCode: string): Promise<RoomData | null> {
     try {
@@ -108,7 +108,6 @@ class DatabaseService {
 
       if (error) {
         if (error.code === "PGRST116") {
-          
           console.error("Room does not exist:", roomCode);
           return null;
         }
@@ -148,7 +147,6 @@ class DatabaseService {
 
   static async joinRoom(roomCode: string, player: Player): Promise<void> {
     try {
-      
       const { data: roomData, error: fetchError } = await supabase
         .from("room")
         .select("player_list")
@@ -159,7 +157,6 @@ class DatabaseService {
         throw new Error("Room not found");
       }
 
-      
       let currentPlayers: Player[] = [];
       try {
         currentPlayers = roomData.player_list
@@ -170,20 +167,18 @@ class DatabaseService {
         currentPlayers = [];
       }
 
-      
-      const playerExists = currentPlayers.some((p) => p.id === player.id);
-      if (playerExists) {
-        console.error("Player already in room, proceeding...");
-        return;
-      }
+      const playerIndex = currentPlayers.findIndex((p) => p.id === player.id);
 
-      
-      const updatedPlayers = [...currentPlayers, player];
+      if (playerIndex !== -1) {
+        currentPlayers[playerIndex] = player;
+      } else {
+        currentPlayers.push(player);
+      }
 
       const { error: updateError } = await supabase
         .from("room")
         .update({
-          player_list: updatedPlayers.map((p) => JSON.stringify(p)),
+          player_list: currentPlayers.map((p) => JSON.stringify(p)),
         })
         .eq("room_code", roomCode.toUpperCase());
 
@@ -198,7 +193,6 @@ class DatabaseService {
   }
 }
 
-
 const loadRoomSettings = (): RoomSettings | null => {
   try {
     const playerData = loadFromLocalStorage<PlayerData | null>(
@@ -212,10 +206,8 @@ const loadRoomSettings = (): RoomSettings | null => {
 
     const roomSettings = playerData.roomSettings;
 
-    
     const now = Date.now();
     if (roomSettings.createdAt + ROOM_SETTINGS_EXPIRY < now) {
-      
       const updatedPlayerData = { ...playerData, roomSettings: undefined };
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, updatedPlayerData);
       return null;
@@ -250,9 +242,7 @@ const saveRoomSettings = (settings: RoomSettings): void => {
   }
 };
 
-
 const useAvatar = () => {
-  
   const savedPlayerData = loadFromLocalStorage<PlayerData | null>(
     LOCAL_STORAGE_KEYS.PLAYER_DATA,
     null
@@ -273,7 +263,6 @@ const useAvatar = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  
   useEffect(() => {
     const playerData: PlayerData = {
       player: savedPlayerData?.player || {
@@ -283,7 +272,7 @@ const useAvatar = () => {
         isHost: false,
       },
       avatarConfig,
-      roomSettings: savedPlayerData?.roomSettings, 
+      roomSettings: savedPlayerData?.roomSettings,
     };
     saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
   }, [avatarConfig, savedPlayerData]);
@@ -305,7 +294,6 @@ const useAvatar = () => {
     closeAvatarModal,
   };
 };
-
 
 const UserProfile: React.FC<{
   nickname: string;
@@ -363,14 +351,16 @@ const UserProfile: React.FC<{
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -10 }}
             transition={{ duration: 0.5 }}
-            className="absolute bottom-3 -left-20 text-white text-xs py-1 px-2 rounded-lg whitespace-nowrap"
+            className={`absolute bottom-6 ${
+              isDesktop() ? "-left-18" : "-left-6"
+            } text-white text-xs py-1 px-2 rounded-lg whitespace-nowrap`}
           >
             <motion.div
               animate={{ x: [0, 5, 0] }}
               transition={{ duration: 1, repeat: Infinity }}
             >
               <div className="flex items-center gap-1">
-                <span>Change</span>
+                {isDesktop() && <span>Change</span>}
                 <FaChevronRight className="text-xs" />
               </div>
             </motion.div>
@@ -391,9 +381,7 @@ const UserProfile: React.FC<{
   </div>
 );
 
-
 const JoinRoomPage: React.FC = () => {
-  
   const { t } = useI18n();
   const { containerVariants, slideInLeft, fadeUp } = useEnhancedAnimations();
   const {
@@ -408,13 +396,11 @@ const JoinRoomPage: React.FC = () => {
   const params = useParams();
   const roomCode = params.code as string;
 
-  
   const savedPlayerData = loadFromLocalStorage<PlayerData | null>(
     LOCAL_STORAGE_KEYS.PLAYER_DATA,
     null
   );
 
-  
   const [mounted, setMounted] = useState<boolean>(false);
   const [nickname, setNickname] = useState<string>(
     savedPlayerData?.player.nickname || ""
@@ -427,7 +413,6 @@ const JoinRoomPage: React.FC = () => {
   const [lastRoomCheck, setLastRoomCheck] = useState<number>(0);
   const [hasSavedPassword, setHasSavedPassword] = useState<boolean>(false);
 
-  
   useEffect(() => {
     const fetchRoomData = async () => {
       if (!roomCode) {
@@ -446,7 +431,6 @@ const JoinRoomPage: React.FC = () => {
 
         setRoomData(data);
 
-        
         const savedSettings = loadRoomSettings();
         if (
           savedSettings &&
@@ -469,7 +453,6 @@ const JoinRoomPage: React.FC = () => {
     fetchRoomData();
   }, [roomCode]);
 
-  
   useEffect(() => {
     if (!roomData) return;
 
@@ -490,32 +473,28 @@ const JoinRoomPage: React.FC = () => {
     return () => clearInterval(interval);
   }, [roomData, roomCode]);
 
-  
   useEffect(() => {
     const playerData: PlayerData = {
       player: {
         id: savedPlayerData?.player.id || generateUniqueId(),
         nickname,
         avatar: JSON.stringify(avatarConfig),
-        isHost: false, 
+        isHost: false,
       },
       avatarConfig,
-      roomSettings: savedPlayerData?.roomSettings, 
+      roomSettings: savedPlayerData?.roomSettings,
     };
     saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
   }, [nickname, avatarConfig, savedPlayerData]);
 
-  
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  
   const validateNickname = useCallback((nickname: string): boolean => {
     return nickname.trim().length > 0;
   }, []);
 
-  
   const handleNicknameChange = useCallback((newNickname: string) => {
     setNickname(newNickname);
   }, []);
@@ -530,7 +509,6 @@ const JoinRoomPage: React.FC = () => {
     setError("");
 
     try {
-      
       const data = await DatabaseService.getRoomData(roomCode);
       if (!data) {
         setError("Room no longer exists");
@@ -538,7 +516,6 @@ const JoinRoomPage: React.FC = () => {
         return;
       }
 
-      
       if (data.room_password) {
         const isValid = await DatabaseService.verifyRoomPassword(
           roomCode,
@@ -551,21 +528,40 @@ const JoinRoomPage: React.FC = () => {
         }
       }
 
-      const player = createPlayerData(
-        nickname,
-        avatarConfig,
-        false 
+      let existingPlayers: Player[] = [];
+      try {
+        existingPlayers = data.player_list
+          ? data.player_list.map((p: string) => JSON.parse(p) as Player)
+          : [];
+      } catch (error) {
+        console.error("Error parsing player list:", error);
+        existingPlayers = [];
+      }
+
+      const savedPlayerId = savedPlayerData?.player.id || generateUniqueId();
+      const existingPlayer = existingPlayers.find(
+        (p) => p.id === savedPlayerId
       );
 
-      
+      let player: Player;
+
+      if (existingPlayer) {
+        player = {
+          ...existingPlayer,
+          nickname: nickname,
+          avatar: JSON.stringify(avatarConfig),
+        };
+      } else {
+        player = createPlayerData(nickname, avatarConfig, false);
+      }
+
       const playerData: PlayerData = {
         player,
         avatarConfig,
-        roomSettings: savedPlayerData?.roomSettings, 
+        roomSettings: savedPlayerData?.roomSettings,
       };
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
 
-      
       if (roomPassword && roomPassword.trim() !== "") {
         const roomSettings: RoomSettings = {
           roomCode,
@@ -599,7 +595,6 @@ const JoinRoomPage: React.FC = () => {
     savedPlayerData,
   ]);
 
-  
   if (!mounted || isLoading) {
     return (
       <div className="h-screen w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
@@ -617,7 +612,6 @@ const JoinRoomPage: React.FC = () => {
     );
   }
 
-  
   if (error && !roomData) {
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">

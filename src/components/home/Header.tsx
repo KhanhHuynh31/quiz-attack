@@ -10,7 +10,7 @@ export const Header: React.FC = () => {
   const { t } = useI18n();
 
   return (
-    <header className="mx-auto flex w-full max-w-7xl items-center justify-between p-4">
+    <header className="mx-auto flex w-full max-w-7xl items-center justify-between p-0 lg:p-4">
       <div className="flex items-center gap-3">
         <motion.div
           animate={{ y: [5, 0, 5] }} // bắt đầu ở dưới, đi lên giữa, rồi xuống lại
