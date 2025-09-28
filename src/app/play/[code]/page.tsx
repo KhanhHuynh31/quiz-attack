@@ -1853,7 +1853,7 @@ const QuizGame = () => {
 
             <div
               className=" rounded-3xl border border-white/10 
-                  bg-gradient-to-b from-white/10 to-white/5 flex flex-1 "
+                  bg-gradient-to-b from-white/10 to-white/5 flex flex-1 min-w-[300px]"
             >
               <CardLogAndChat
                 usedCardsLog={usedCardsLog}

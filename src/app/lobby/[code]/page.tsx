@@ -1041,7 +1041,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       variants={slideInRight}
       initial="hidden"
       animate="visible"
-      className={` flex-col h-full bg-white/10 backdrop-blur-lg rounded-2xl border border-white/20 shadow-xl  ${
+      className={` flex-col h-full bg-white/10 backdrop-blur-lg min-w-[300px] rounded-2xl border border-white/20 shadow-xl  ${
         mobileSections.chat ? "flex" : "hidden lg:flex"
       }`}
     >

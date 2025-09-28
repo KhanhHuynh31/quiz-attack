@@ -8,10 +8,17 @@ import React, {
   useMemo,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FiSend, FiMessageCircle, FiZap, FiUsers } from "react-icons/fi";
+import {
+  FiSend,
+  FiMessageCircle,
+  FiZap,
+  FiUsers,
+  FiSmile,
+} from "react-icons/fi";
 import { supabase } from "@/lib/supabaseClient";
 import { CardUsage, Card, PlayerData } from "@/types/type";
 import Avatar, { genConfig } from "react-nice-avatar";
+import { EmojiPicker } from "frimousse";
 
 interface AvatarFullConfig {
   [key: string]: any;
@@ -48,9 +55,30 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
   const [newMessage, setNewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"chat" | "cards">("chat");
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(event.target as Node) &&
+        inputRef.current &&
+        !inputRef.current.contains(event.target as Node)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const setupChatSubscription = useCallback(async () => {
     if (!roomCode || !playerData?.player?.id) return;
@@ -142,6 +170,7 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
       }
 
       setNewMessage("");
+      setShowEmojiPicker(false);
     } catch (error) {
       console.error("Error sending message:", error);
     } finally {
@@ -158,6 +187,17 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
     },
     [sendMessage]
   );
+
+  const handleEmojiSelect = useCallback(({ emoji }: { emoji: string }) => {
+    setNewMessage((prev) => prev + emoji);
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, []);
+
+  const toggleEmojiPicker = useCallback(() => {
+    setShowEmojiPicker((prev) => !prev);
+  }, []);
 
   const formatTimestamp = useCallback((timestamp: string) => {
     const date = new Date(timestamp);
@@ -221,6 +261,11 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
     return groups;
   }, [messages]);
 
+  // Auto-scroll to bottom when new messages arrive
+  // useEffect(() => {
+  //   messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // }, [messages]);
+
   useEffect(() => {
     let cleanup: (() => void) | undefined;
 
@@ -237,7 +282,7 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
 
   return (
     <motion.div
-      className={`flex flex-1 flex-col min-w-[300px] overflow-hidden ${
+      className={`flex flex-1 flex-col  overflow-hidden ${
         isLobby ? "lobby-mode" : ""
       }`}
       initial={{ opacity: 0, x: 50 }}
@@ -287,7 +332,7 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 flex flex-col overflow-auto">
+      <div className="flex-1 flex flex-col min-h-[450px] overflow-auto">
         <AnimatePresence mode="wait">
           {activeTab === "chat" ? (
             <motion.div
@@ -295,10 +340,10 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="flex-1 flex flex-col min-h-0  "
+              className="flex-1 flex flex-col min-h-0"
             >
               {/* Messages Container - Discord Style */}
-              <div className="flex-1 py-2 overflow-y-auto min-h-0  custom-scrollbar">
+              <div className="flex-1 py-2 overflow-y-auto min-h-0 custom-scrollbar">
                 {messages.length === 0 ? (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -327,7 +372,7 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
                               initial={{ opacity: 0, y: 5 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ duration: 0.2 }}
-                              className="group flex gap-3 hover:bg-gradient-to-r from-white/5 to-white/10 px-2 py-1 "
+                              className="group flex gap-3 hover:bg-gradient-to-r from-white/5 to-white/10 px-2 py-1"
                             >
                               <div className="flex items-start gap-3 max-w-full w-full">
                                 {/* Avatar - Only show for first message in group */}
@@ -362,7 +407,7 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
 
                                   <div
                                     className={`${
-                                      isFirstInGroup ? "" : "ml-14"
+                                      isFirstInGroup ? "" : "ml-12"
                                     } flex items-start justify-between gap-2`}
                                   >
                                     <p className="text-sm text-gray-200 leading-relaxed break-words flex-1">
@@ -387,20 +432,95 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
                 )}
               </div>
 
-              {/* Discord-style Message Input - No Border */}
-              <div className="p-4 ">
+              {/* Discord-style Message Input with Emoji Picker */}
+              <div className="p-4 relative ">
+                {/* Emoji Picker */}
+                <AnimatePresence>
+                  {showEmojiPicker && (
+                    <motion.div
+                      ref={emojiPickerRef}
+                      initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                      transition={{ duration: 0.2 }}
+                      className="absolute bottom-full left-0  right-0 bg-gray-800 flex rounded-xl justify-center z-100"
+                    >
+                      <div className="absolute -bottom-3 right-17 w-0 h-0 border-l-[10px] border-r-[10px] border-t-[12px] border-transparent border-t-gray-800"></div>
+                      <EmojiPicker.Root
+                        onEmojiSelect={handleEmojiSelect}
+                        className="flex h-[300px] w-full flex-col  rounded-xl bg-gray-800 "
+                      >
+                        <EmojiPicker.Search
+                          className="z-10 mx-2 mt-2 appearance-none rounded-md bg-gray-700 px-2.5 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          placeholder="Search emojis..."
+                        />
+                        <EmojiPicker.Viewport className="relative flex-1 ">
+                          <EmojiPicker.Loading className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
+                            Loading…
+                          </EmojiPicker.Loading>
+                          <EmojiPicker.Empty className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
+                            No emoji found.
+                          </EmojiPicker.Empty>
+                          <EmojiPicker.List
+                            className="select-none pb-1.5 flex justify-center overflow-y-hidden"
+                            components={{
+                              CategoryHeader: ({ category, ...props }) => (
+                                <div
+                                  className="bg-gray-800 px-3 pt-3 pb-1.5 font-medium text-gray-400 text-xs sticky top-0"
+                                  {...props}
+                                >
+                                  {category.label}
+                                </div>
+                              ),
+                              Row: ({ children, ...props }) => (
+                                <div
+                                  className="scroll-my-1.5 px-1.5"
+                                  {...props}
+                                >
+                                  {children}
+                                </div>
+                              ),
+                              Emoji: ({ emoji, ...props }) => (
+                                <button
+                                  className="flex size-8 items-center justify-center rounded-md text-lg hover:bg-gray-700 data-[active]:bg-gray-600 transition-colors"
+                                  {...props}
+                                >
+                                  {emoji.emoji}
+                                </button>
+                              ),
+                            }}
+                          />
+                        </EmojiPicker.Viewport>
+                      </EmojiPicker.Root>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 <div className="relative">
                   <input
+                    ref={inputRef}
                     type="text"
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyPress={handleKeyPress}
                     placeholder={`Message #${roomCode}`}
                     disabled={isLoading}
-                    className="w-full bg-black/20 border-none rounded-lg px-4 py-3 text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-0 disabled:opacity-50 transition-all duration-200 "
+                    className="w-full bg-black/20 border-none rounded-lg px-4 py-3 text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-0 disabled:opacity-50 transition-all duration-200 pr-24"
                     maxLength={2000}
                   />
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
+                    {/* Emoji Picker Button */}
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={toggleEmojiPicker}
+                      type="button"
+                      className="p-2 text-gray-400 hover:text-gray-200 transition-all duration-200 rounded"
+                    >
+                      <FiSmile size={16} />
+                    </motion.button>
+
+                    {/* Send Button */}
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
@@ -423,7 +543,7 @@ const CardLogAndChat: React.FC<CardLogAndChatProps> = ({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="flex-1 p-4 overflow-y-auto max-h-[520px] custom-scrollbar "
+              className="flex-1 p-4 overflow-y-auto max-h-[520px] custom-scrollbar"
             >
               <div className="space-y-3">
                 {recentCards.length === 0 ? (
