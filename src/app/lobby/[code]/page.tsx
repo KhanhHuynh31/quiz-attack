@@ -720,7 +720,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
       variants={staggerChildren}
       initial="hidden"
       animate="visible"
-      className="flex flex-col-reverse gap-4 lg:flex-row mb-2 justify-between"
+      className="flex flex-col gap-4 mb-2"
     >
       <div className="block lg:hidden relative w-full">
         <motion.button
@@ -789,7 +789,7 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
         </AnimatePresence>
       </div>
 
-      <div className="hidden lg:flex space-x-3">
+      <div className="hidden lg:flex w-full space-x-2">
         {TABS.map((tab) => {
           const IconComponent = tab.icon;
           const isActive = activeTab === tab.key;
@@ -798,10 +798,10 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             <motion.button
               key={tab.key}
               variants={fadeUp}
-              whileHover={{ scale: 1.05, y: -2 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => handleTabChange(tab.key)}
-              className={`flex items-center space-x-3 px-6 py-3 rounded-xl font-bold transition-all border relative ${
+              className={`flex items-center justify-center space-x-2 px-4 py-3 rounded-xl font-bold transition-all border relative flex-1 ${
                 isActive
                   ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white border-blue-400/50 shadow-lg"
                   : "bg-white/10 text-white/70 hover:bg-white/20 border-white/20"
@@ -811,81 +811,16 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
                 animate={isActive ? { rotate: 360 } : { rotate: 0 }}
                 transition={{ duration: 0.5 }}
               >
-                <IconComponent />
+                <IconComponent className="text-sm" />
               </motion.div>
-              <span>{t[tab.labelKey]}</span>
+              <span className="text-sm">{t[tab.labelKey]}</span>
               {!isHost && (
-                <FaLock className="text-red-400 text-sm absolute -top-1 -right-1 bg-gray-800 rounded-full p-1 w-4 h-4" />
+                <FaLock className="text-red-400 text-xs absolute -top-1 -right-1 bg-gray-800 rounded-full p-0.5 w-3 h-3" />
               )}
             </motion.button>
           );
         })}
       </div>
-
-      <motion.div
-        {...animations.startButton}
-        className="flex-shrink-0 w-full lg:w-auto"
-      >
-        <motion.button
-          whileHover={
-            canStartGame
-              ? {
-                  scale: 1.02,
-                  y: -3,
-                }
-              : {}
-          }
-          whileTap={canStartGame ? { scale: 0.95 } : {}}
-          onClick={handleStartGame}
-          disabled={!canStartGame}
-          className={`relative flex items-center justify-center space-x-4 px-8 py-4 rounded-2xl font-bold text-xl shadow-2xl transition-all overflow-hidden border w-full lg:w-auto ${
-            !canStartGame
-              ? "bg-gray-500/50 text-gray-300 border-gray-400/30 cursor-not-allowed"
-              : "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 border-green-400/50"
-          }`}
-        >
-          {canStartGame && (
-            <motion.div
-              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
-              animate={{ x: ["-100%", "100%"] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-            />
-          )}
-
-          <div className="relative z-10 flex items-center space-x-4">
-            {!isHost ? (
-              <FaLock className="text-2xl" />
-            ) : isLoading || !isPlayerVerified ? (
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-              >
-                <FaSync className="text-2xl" />
-              </motion.div>
-            ) : (
-              <motion.div
-                animate={{ x: [0, 5, -5, 0] }}
-                transition={{
-                  duration: 5,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
-              >
-                <FaPlay className="text-2xl" />
-              </motion.div>
-            )}
-            <span>
-              {!isHost
-                ? "Wait Host"
-                : !isPlayerVerified
-                ? "Verifying..."
-                : isLoading
-                ? t.loading
-                : t.startGame}
-            </span>
-          </div>
-        </motion.button>
-      </motion.div>
     </motion.div>
   );
 
@@ -944,12 +879,12 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     const IconComponent = config.icon;
 
     return (
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden flex flex-col">
         <AnimatePresence mode="wait">
           <motion.div
             key={`tab-${activeTab}`}
             {...animations.tabContent}
-            className="h-full overflow-y-auto overflow-x-hidden space-y-0 sm:space-y-6 p-0 sm:p-3 tab-content-section"
+            className="flex-1 overflow-y-auto overflow-x-hidden space-y-0 sm:space-y-6 p-0 sm:p-3 tab-content-section"
             ref={tabContentRef}
           >
             <div className={!isHost ? "pointer-events-none opacity-60" : ""}>
@@ -957,6 +892,72 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
             </div>
           </motion.div>
         </AnimatePresence>
+
+        {/* Nút Start Game được đặt ở đây, dưới cùng của tab content */}
+        <motion.div
+          {...animations.startButton}
+          className="flex-shrink-0 w-full px-2 pt-4"
+        >
+          <motion.button
+            whileHover={
+              canStartGame
+                ? {
+                    scale: 1.02,
+                    y: -3,
+                  }
+                : {}
+            }
+            whileTap={canStartGame ? { scale: 0.95 } : {}}
+            onClick={handleStartGame}
+            disabled={!canStartGame}
+            className={`relative flex items-center justify-center space-x-4 px-6 py-2 rounded-2xl font-bold text-xl shadow-2xl transition-all overflow-hidden border w-full ${
+              !canStartGame
+                ? "bg-gray-500/50 text-gray-300 border-gray-400/30 cursor-not-allowed"
+                : "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 border-green-400/50"
+            }`}
+          >
+            {canStartGame && (
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                animate={{ x: ["-100%", "100%"] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+              />
+            )}
+
+            <div className="relative z-10 flex items-center space-x-4">
+              {!isHost ? (
+                <FaLock className="text-2xl" />
+              ) : isLoading || !isPlayerVerified ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                >
+                  <FaSync className="text-2xl" />
+                </motion.div>
+              ) : (
+                <motion.div
+                  animate={{ x: [0, 5, -5, 0] }}
+                  transition={{
+                    duration: 5,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                >
+                  <FaPlay className="text-2xl" />
+                </motion.div>
+              )}
+              <span>
+                {!isHost
+                  ? "Wait Host"
+                  : !isPlayerVerified
+                  ? "Verifying..."
+                  : isLoading
+                  ? t.loading
+                  : t.startGame}
+              </span>
+            </div>
+          </motion.button>
+        </motion.div>
       </div>
     );
   };
