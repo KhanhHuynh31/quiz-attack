@@ -37,7 +37,6 @@ import PlayerList from "@/components/play/Playlist";
 import QuestionCard from "@/components/play/QuestionCard";
 import PlayerHand from "@/components/play/PlayerHand";
 import CardAnimation from "@/components/play/CardAnimation";
-import ConfigViewer from "@/components/play/ConfigViewer";
 import PauseOverlay from "@/components/play/PauseOverPlay";
 import GameOver from "@/components/play/GameOver";
 import { supabase } from "@/lib/supabaseClient";
@@ -1873,12 +1872,6 @@ const QuizGame = () => {
           activeCards={activeCards}
           isDrawingCard={isDrawingCard}
           drawnCard={drawnCard}
-        />
-
-        <ConfigViewer
-          showConfig={showConfig}
-          config={config}
-          toggleConfigView={toggleConfigView}
         />
 
         <PauseOverlay

@@ -1,6 +1,6 @@
 import { ExtendedGameConfig } from "@/types/type";
 import { motion } from "framer-motion";
-import { FaHome, FaInfoCircle, FaPause, FaPlay, FaClock } from "react-icons/fa";
+import { FaHome, FaPause, FaPlay, FaClock } from "react-icons/fa";
 
 interface TimerProps {
   timeLeft: number;
@@ -20,7 +20,6 @@ const Timer: React.FC<TimerProps> = ({
   isPaused,
   togglePause,
   goHome,
-  toggleConfigView,
   config
 }) => {
   if (!config) return null;
@@ -45,13 +44,7 @@ const Timer: React.FC<TimerProps> = ({
             >
               <FaHome className="text-xl" />
             </button>
-            <button
-              onClick={toggleConfigView}
-              className="flex items-center p-2 rounded-full hover:bg-white/10 transition-colors text-white"
-              title="Xem cấu hình trò chơi"
-            >
-              <FaInfoCircle className="text-xl" />
-            </button>
+
           </div>
           
           <div className="flex items-center">
