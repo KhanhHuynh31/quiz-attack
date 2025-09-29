@@ -460,16 +460,36 @@ const QuizAttackLobbyEnhanced: React.FC<QuizAttackLobbyProps> = ({
     console.log(`Card: ${cardTitle}, Description: ${description}`);
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
     const data = loadPlayerData();
     setPlayerData(data);
+    console.log("Loaded player data:", data);
 
     if (!data || !data.player.nickname || !data.player.avatar) {
       setShouldRedirectToJoin(true);
+      setDataLoaded(true);
+      return;
+    }
+
+    // Chỉ kiểm tra currentRoomCode nếu là host
+    if (data.player.isHost) {
+      try {
+        const storedRoomCode = data.currentRoomCode;
+        if (storedRoomCode && storedRoomCode !== roomCode) {
+          setShouldRedirectToJoin(true);
+        }
+        else {
+          setShouldRedirectToJoin(false);
+        }
+        console.log('Host currentRoomCode:', storedRoomCode);
+        console.log('Expected roomCode:', roomCode); 
+      } catch (error) {
+        console.error('Error checking currentRoomCode:', error);
+      }
     }
 
     setDataLoaded(true);
-  }, []);
+  }, [roomCode]);
 
   useEffect(() => {
     if (!dataLoaded || isLoading) return;

@@ -26,11 +26,19 @@ export interface RoomSettings {
   quizPackId: number | null;
   createdAt: number;
 }
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  avatar: string;
+  avatarConfig?: AvatarFullConfig;
+}
 export interface PlayerData {
-  player: Player;
+ player: Player;
   avatarConfig: AvatarFullConfig;
-  customAvatarImage: string | null;
   roomSettings?: RoomSettings;
+  authUser?: AuthUser;
+  currentRoomCode?: string;
 }
 
 export type TabType = "mode" | "settings" | "packs";

@@ -65,6 +65,7 @@ interface PlayerData {
   avatarConfig: AvatarFullConfig;
   roomSettings?: RoomSettings;
   authUser?: AuthUser;
+  currentRoomCode?: string;
 }
 
 interface RoomSettings {
@@ -170,6 +171,7 @@ const createPlayerData = (
   nickname: string,
   avatarConfig: AvatarFullConfig,
   isHost: boolean,
+  roomCode?: string,
   authUser?: AuthUser
 ): Player => {
   if (authUser) {
@@ -192,6 +194,28 @@ const createPlayerData = (
     isHost,
     isAuthenticated: false,
   };
+};
+
+const savePlayerData = (
+  player: Player,
+  avatarConfig: AvatarFullConfig,
+  roomCode?: string,
+  roomSettings?: RoomSettings,
+  authUser?: AuthUser
+): void => {
+  try {
+    const playerData: PlayerData = {
+      player,
+      avatarConfig,
+      roomSettings,
+      authUser,
+      currentRoomCode: roomCode,
+    };
+
+    saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+  } catch (error) {
+    console.error("Failed to save player data:", error);
+  }
 };
 
 const parseAvatarData = (avatar: string): { config: AvatarFullConfig } => {
@@ -247,7 +271,7 @@ const loadAuthUser = (): AuthUser | null => {
   }
 };
 
-const saveAuthUser = (authUser: AuthUser): void => {
+const saveAuthUser = (authUser: AuthUser, roomCode?: string): void => {
   try {
     saveToLocalStorage("auth_user", authUser);
 
@@ -268,6 +292,7 @@ const saveAuthUser = (authUser: AuthUser): void => {
       avatarConfig: authUser.avatarConfig || DEFAULT_AVATAR_CONFIG,
       roomSettings: existingPlayerData?.roomSettings,
       authUser,
+      currentRoomCode: roomCode || existingPlayerData?.currentRoomCode,
     };
 
     saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
@@ -298,6 +323,7 @@ const clearAuthUser = (): void => {
         },
         avatarConfig: config,
         roomSettings: playerData.roomSettings,
+        currentRoomCode: playerData.currentRoomCode,
         authUser: undefined,
       };
 
@@ -611,7 +637,13 @@ const useAuthentication = () => {
 
   const handleAuthSuccess = useCallback((user: AuthUser) => {
     setAuthUser(user);
-    saveAuthUser(user);
+
+    const existingPlayerData = loadFromLocalStorage<PlayerData | null>(
+      LOCAL_STORAGE_KEYS.PLAYER_DATA,
+      null
+    );
+
+    saveAuthUser(user, existingPlayerData?.currentRoomCode);
   }, []);
 
   const handleSignOut = useCallback(async () => {
@@ -802,6 +834,7 @@ const useAvatar = (
         },
         avatarConfig,
         roomSettings: savedPlayerData?.roomSettings,
+        currentRoomCode: savedPlayerData?.currentRoomCode,
       };
       saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
     }
@@ -1251,6 +1284,17 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
   }, [initialRoomCode]);
 
   useEffect(() => {
+    const playerData = loadFromLocalStorage<PlayerData | null>(
+      LOCAL_STORAGE_KEYS.PLAYER_DATA,
+      null
+    );
+
+    if (playerData?.currentRoomCode) {
+      console.log("Last room code:", playerData.currentRoomCode);
+    }
+  }, []);
+
+  useEffect(() => {
     setMounted(true);
   }, []);
 
@@ -1297,6 +1341,55 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     [authUser, refreshUserData]
   );
 
+  const proceedWithJoin = async (roomCodeToJoin: string, password?: string) => {
+    setIsJoining(true);
+    const currentNickname = authUser ? authUser.name : nickname;
+
+    try {
+      const player = createPlayerData(
+        currentNickname,
+        avatarConfig,
+        false,
+        roomCodeToJoin,
+        authUser ?? undefined
+      );
+
+      savePlayerData(
+        player,
+        avatarConfig,
+        roomCodeToJoin,
+        loadFromLocalStorage<PlayerData | null>(
+          LOCAL_STORAGE_KEYS.PLAYER_DATA,
+          null
+        )?.roomSettings,
+        authUser ?? undefined
+      );
+
+      await DatabaseService.joinRoom(roomCodeToJoin, player);
+
+      if (password) {
+        saveRoomSettings({
+          roomCode: roomCodeToJoin,
+          password,
+          gameModeId: null,
+          quizPackId: null,
+          createdAt: Date.now(),
+        });
+      }
+
+      router.push(`/lobby/${roomCodeToJoin}`);
+    } catch (error) {
+      console.error("Failed to join room:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to join room. Please check the room code and try again."
+      );
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
   const handleCreateRoom = useCallback(async () => {
     const currentNickname = authUser ? authUser.name : nickname;
 
@@ -1316,19 +1409,20 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         currentNickname,
         avatarConfig,
         true,
+        roomCode,
         authUser ?? undefined
       );
 
-      const playerData: PlayerData = {
+      savePlayerData(
         player,
         avatarConfig,
-        roomSettings: loadFromLocalStorage<PlayerData | null>(
+        roomCode,
+        loadFromLocalStorage<PlayerData | null>(
           LOCAL_STORAGE_KEYS.PLAYER_DATA,
           null
         )?.roomSettings,
-        authUser: authUser ?? undefined,
-      };
-      saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
+        authUser ?? undefined
+      );
 
       await DatabaseService.createRoom(
         roomCode,
@@ -1372,54 +1466,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
     validateNickname,
     validateRoomCode,
   ]);
-
-  const proceedWithJoin = async (roomCodeToJoin: string, password?: string) => {
-    setIsJoining(true);
-    const currentNickname = authUser ? authUser.name : nickname;
-
-    try {
-      const player = createPlayerData(
-        currentNickname,
-        avatarConfig,
-        false,
-        authUser ?? undefined
-      );
-
-      const playerData: PlayerData = {
-        player,
-        avatarConfig,
-        roomSettings: loadFromLocalStorage<PlayerData | null>(
-          LOCAL_STORAGE_KEYS.PLAYER_DATA,
-          null
-        )?.roomSettings,
-        authUser: authUser ?? undefined,
-      };
-      saveToLocalStorage(LOCAL_STORAGE_KEYS.PLAYER_DATA, playerData);
-
-      await DatabaseService.joinRoom(roomCodeToJoin, player);
-
-      if (password) {
-        saveRoomSettings({
-          roomCode: roomCodeToJoin,
-          password,
-          gameModeId: null,
-          quizPackId: null,
-          createdAt: Date.now(),
-        });
-      }
-
-      router.push(`/lobby/${roomCodeToJoin}`);
-    } catch (error) {
-      console.error("Failed to join room:", error);
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Failed to join room. Please check the room code and try again."
-      );
-    } finally {
-      setIsJoining(false);
-    }
-  };
 
   const handleJoinRoom = useCallback(async () => {
     const currentNickname = authUser ? authUser.name : nickname;
@@ -1492,14 +1538,12 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
       <div className="flex items-center justify-between p-4">
         <Header />
       </div>
-
       {/* Modals */}
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={closeAuthModal}
         onAuthSuccess={handleAuthSuccess}
       />
-
       <AvatarCustomModal
         isOpen={isAvatarModalOpen}
         onClose={closeAvatarModal}
@@ -1510,7 +1554,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
           handleAvatarSave(newConfig);
         }}
       />
-
       <PasswordModal
         isOpen={passwordModal.isOpen}
         onClose={() =>
@@ -1520,7 +1563,6 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
         roomCode={passwordModal.roomCode}
         error={passwordModal.error}
       />
-
       <motion.main
         variants={containerVariants}
         initial="hidden"
@@ -1760,6 +1802,7 @@ const QuizAttackStart: React.FC<QuizAttackStartProps> = ({
           </motion.div>
         </motion.section>
       </motion.main>
+      f
     </div>
   );
 };
